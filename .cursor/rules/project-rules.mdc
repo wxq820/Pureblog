@@ -1,0 +1,31 @@
+# PureBlog Project Rules
+
+## Scope
+This repository is a modular-monolith blog project used to showcase backend engineering capability.
+
+## Mandatory constraints
+- Follow docs under `/docs`
+- Keep database table prefix as `pb_`
+- Do not split into microservices in phase 1
+- Use Java 17 + Spring Boot 3 + MyBatis-Plus
+- Use Redis for cache/counters, Kafka for async side effects, Elasticsearch for search
+- Do not introduce Dubbo in phase 1 unless explicitly requested
+- Output complete files, not partial snippets
+- Keep controller thin, business logic in service/manager
+- Keep DTO/VO/DO separated
+- Update SQL/doc if schema changes
+
+## Code style
+- Use clear package boundaries
+- Use Validation for request params
+- Use unified ApiResponse
+- Use unified GlobalExceptionHandler
+- Use transaction only on write operations
+- Use XML for complex queries when MyBatis-Plus is not enough
+
+## Review expectations
+When generating code, always state:
+1. which files changed
+2. whether DB changed
+3. how to test
+4. what to do next

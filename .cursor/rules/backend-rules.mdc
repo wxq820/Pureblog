@@ -1,0 +1,28 @@
+# Backend Implementation Rules
+
+## Security
+- JWT based authentication
+- RBAC for admin endpoints
+- Current user from SecurityContext
+- No insecure direct object access
+
+## Cache
+- Read path: cache first, DB fallback
+- Update article => clear article detail cache
+- List cache can use short TTL
+- Do not use Redis as source of truth
+
+## Messaging
+- Kafka only for async side effects
+- Consumer must consider idempotency
+- Message failures cannot break main business transaction
+
+## Search
+- Only published articles should be indexed
+- Offline/deleted articles must be removed from search visibility
+- Provide rebuild-index capability
+
+## Database
+- article metadata and content must be stored in separate tables
+- keep audit fields on every table
+- no direct DO exposure to frontend

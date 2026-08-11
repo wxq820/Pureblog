@@ -1,0 +1,18 @@
+# Frontend Implementation Rules
+
+## Stack
+- Vue3 + TypeScript
+- Pinia for state
+- Vue Router for routing
+- Element Plus for admin
+
+## Structure
+- portal and admin are separated projects
+- API requests must be encapsulated under `/api`
+- route guards should handle auth and admin role check
+- forms must have validation
+
+## UI priority
+- Functionality first
+- Keep pages clean and maintainable
+- Avoid over-designed UI in early phase
