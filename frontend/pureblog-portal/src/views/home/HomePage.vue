@@ -9,21 +9,32 @@
       </div>
     </section>
 
-    <SkillTree :tree="currentTree" class="skill-tree-section" />
-
     <div class="content-grid">
       <aside class="left-sidebar">
-        <div class="card">
-          <h3 class="section-title">热门文章</h3>
-          <div class="hot-list">
+        <div class="card hot-card">
+          <div class="tab-header">
+            <button :class="['tab-btn', { active: articleTab === 'hot' }]"
+                    @click="articleTab = 'hot'">热门文章</button>
+            <button :class="['tab-btn', { active: articleTab === 'latest' }]"
+                    @click="articleTab = 'latest'">最新文章</button>
+          </div>
+
+          <div v-show="articleTab === 'hot'" class="hot-list">
             <div v-for="(article, i) in hotArticles" :key="article.id" class="hot-item" @click="$router.push(`/article/${article.id}`)">
               <span class="rank">{{ i + 1 }}</span>
               <span class="title">{{ article.title }}</span>
             </div>
           </div>
+
+          <div v-show="articleTab === 'latest'" class="article-list">
+            <ArticleCard v-for="article in articles" :key="article.id" :article="article" />
+            <div v-if="loading" class="loading text-secondary">加载中...</div>
+            <div v-if="!loading && articles.length === 0" class="empty text-secondary">暂无文章</div>
+            <button v-if="hasMore && articleTab === 'latest'" class="btn btn-outline load-more" @click="loadMore">加载更多</button>
+          </div>
         </div>
 
-        <div class="card mt-4">
+        <div class="card category-card">
           <h3 class="section-title">分类</h3>
           <div class="category-list">
             <router-link v-for="cat in categories" :key="cat.id" :to="`/?category=${cat.id}`" class="category-item">
@@ -34,15 +45,9 @@
         </div>
       </aside>
 
-      <main>
-        <h2 class="section-title">最新文章</h2>
-        <div class="article-list">
-          <ArticleCard v-for="article in articles" :key="article.id" :article="article" />
-          <div v-if="loading" class="loading text-secondary">加载中...</div>
-          <div v-if="!loading && articles.length === 0" class="empty text-secondary">暂无文章</div>
-        </div>
-        <button v-if="hasMore" class="btn btn-outline load-more" @click="loadMore">加载更多</button>
-      </main>
+      <section class="tree-pane">
+        <SkillTree :tree="currentTree" class="skill-tree-section" />
+      </section>
     </div>
   </div>
 </template>
@@ -58,6 +63,7 @@ import type { ArticleListVO } from '@/types'
 
 const router = useRouter()
 const searchKeyword = ref('')
+const articleTab = ref<'hot' | 'latest'>('hot')
 const articles = ref<ArticleListVO[]>([])
 const hotArticles = ref<ArticleListVO[]>([])
 const categories = ref<any[]>([])
@@ -124,4 +130,21 @@ onMounted(() => {
 .hot-item .title { font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .category-list { display: flex; flex-direction: column; gap: 8px; }
 .category-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
+
+.content-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 24px; min-height: 600px; }
+.left-sidebar { display: grid; grid-template-rows: 2fr 1fr; gap: 16px; min-width: 0; }
+.tree-pane { height: calc(100vh - 240px); min-height: 600px; min-width: 0; }
+.left-sidebar .card { min-height: 0; overflow: auto; }
+.tree-pane .skill-tree-section { width: 100%; height: 100%; display: block; }
+
+.tab-header { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin: -16px -16px 12px; background: var(--bg-secondary); }
+.tab-btn { flex: 1; padding: 10px; background: transparent; border: none; cursor: pointer; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all 0.15s; }
+.tab-btn:hover { color: var(--primary); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; background: white; }
+
+@media (max-width: 900px) {
+  .content-grid { grid-template-columns: 1fr; }
+  .left-sidebar { grid-template-rows: auto auto; }
+  .tree-pane { min-height: 480px; }
+}
 </style>

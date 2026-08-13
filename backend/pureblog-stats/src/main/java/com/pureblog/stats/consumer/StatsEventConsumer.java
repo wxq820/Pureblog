@@ -11,7 +11,7 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 @Slf4j
-@Component
+@Component("statsEventConsumerForStats")
 @RequiredArgsConstructor
 public class StatsEventConsumer {
 
