@@ -1,286 +1,329 @@
 # 06 API 接口清单
 
-> 说明：以下为第一阶段推荐接口清单。接口风格采用 RESTful + 统一响应结构。
+> 当前所有 HTTP 接口的清单。统一前缀 `/api`，统一响应结构 `ApiResponse<T>`：
+> ```json
+> { "code": 0, "message": "success", "data": {} }
+> ```
+> 分页响应 `PageResult<T>`：
+> ```json
+> { "records": [], "total": 0, "page": 1, "size": 10, "totalPages": 0 }
+> ```
 
-统一响应结构建议：
-
-```json
-{
-  "code": 0,
-  "message": "success",
-  "data": {}
-}
-```
+所有带鉴权要求的接口，需要在 Header 携带 `Authorization: Bearer <accessToken>`，由 `AuthInterceptor` 校验。
 
 ---
 
 ## 1. 认证模块
 
-### 1.1 注册
-- `POST /api/auth/register`
-
-### 1.2 登录
+### 1.1 登录
 - `POST /api/auth/login`
+- Body: `{username, password, captchaKey?, captchaCode?}`
+- 公开
 
-### 1.3 刷新 token
-- `POST /api/auth/refresh-token`
+### 1.2 注册
+- `POST /api/auth/register`
+- Body: `{username, password, email, nickname?}`
+- 公开
+
+### 1.3 刷新 Token
+- `POST /api/auth/refresh`
+- Body: `{refreshToken}`
+- 公开
 
 ### 1.4 退出登录
 - `POST /api/auth/logout`
+- 需登录
 
-### 1.5 获取当前用户信息
-- `GET /api/auth/me`
+### 1.5 获取图形验证码 Key
+- `GET /api/auth/captcha`
+- 返回 `{key}`
+- 公开
 
 ---
 
 ## 2. 用户模块
 
-### 2.1 获取作者主页
-- `GET /api/users/{userId}/profile`
+### 2.1 当前用户
+- `GET /api/user/me`
+- 需登录
 
-### 2.2 更新个人资料
-- `PUT /api/users/profile`
+### 2.2 他人主页
+- `GET /api/user/public/{userId}`
+- 公开
 
-### 2.3 关注作者
-- `POST /api/users/{userId}/follow`
+### 2.3 修改个人资料
+- `PUT /api/user/profile`
+- Body: `{nickname?, bio?, avatarUrl?}`
+- 需登录
 
-### 2.4 取消关注作者
-- `DELETE /api/users/{userId}/follow`
+### 2.4 关注
+- `POST /api/user/follow/{userId}`
+- 需登录
 
-### 2.5 查询我的关注列表
-- `GET /api/users/following`
+### 2.5 取消关注
+- `DELETE /api/user/follow/{userId}`
+- 需登录
 
-### 2.6 查询我的粉丝列表
-- `GET /api/users/followers`
+### 2.6 粉丝列表
+- `GET /api/user/followers/{userId}?page=1&size=20`
+- 公开
+
+### 2.7 关注列表
+- `GET /api/user/following/{userId}?page=1&size=20`
+- 公开
 
 ---
 
 ## 3. 文章模块（前台）
 
-### 3.1 首页文章列表
-- `GET /api/articles`
-
-支持参数：
-- `pageNum`
-- `pageSize`
-- `keyword`
-- `categoryId`
-- `tagId`
-- `authorId`
-- `sortBy=latest|hot`
+### 3.1 文章列表
+- `GET /api/article/list?page=1&size=10&keyword=&categoryId=&tagId=&sortBy=&sortOrder=`
+- 公开
 
 ### 3.2 文章详情
-- `GET /api/articles/{articleId}`
+- `GET /api/article/public/{id}`
+- 公开
 
 ### 3.3 热门文章
-- `GET /api/articles/hot`
+- `GET /api/article/hot?limit=10`
+- 公开
 
-### 3.4 最新文章
-- `GET /api/articles/latest`
+### 3.4 精选文章
+- `GET /api/article/featured?limit=5`
+- 公开
 
-### 3.5 作者文章列表
-- `GET /api/users/{userId}/articles`
+### 3.5 作者文章
+- `GET /api/article/author/{authorId}?page=1&size=10`
+- 公开
 
----
+### 3.6 分类列表
+- `GET /api/category/list`
+- 公开
 
-## 4. 文章模块（作者后台）
-
-### 4.1 新增文章
-- `POST /api/author/articles`
-
-### 4.2 保存草稿
-- `POST /api/author/articles/draft`
-
-### 4.3 更新文章
-- `PUT /api/author/articles/{articleId}`
-
-### 4.4 发布文章
-- `POST /api/author/articles/{articleId}/publish`
-
-### 4.5 下线文章
-- `POST /api/author/articles/{articleId}/offline`
-
-### 4.6 删除文章
-- `DELETE /api/author/articles/{articleId}`
-
-### 4.7 查询我的文章分页
-- `GET /api/author/articles`
-
-### 4.8 查询文章版本列表
-- `GET /api/author/articles/{articleId}/versions`
-
-### 4.9 查询文章指定版本
-- `GET /api/author/articles/{articleId}/versions/{versionNo}`
+### 3.7 标签列表
+- `GET /api/tag/list`
+- 公开
 
 ---
 
-## 5. 分类与标签
+## 4. 文章模块（作者）
 
-### 5.1 查询分类列表
-- `GET /api/categories`
+### 4.1 创建草稿
+- `POST /api/article/create`
+- Body: `{title, summary, content, htmlContent, categoryId, tagIds?, coverUrl?}`
+- 需登录
 
-### 5.2 查询标签列表
-- `GET /api/tags`
+### 4.2 更新文章
+- `PUT /api/article/update`
+- Body: `{id, title, summary, content, htmlContent, categoryId, tagIds?, coverUrl?}`
+- 需登录，且为作者本人
 
-### 5.3 新增分类（管理员）
-- `POST /api/admin/categories`
+### 4.3 发布
+- `POST /api/article/publish`
+- Body: `{id, isFeatured?, isTop?}`
+- 需登录
 
-### 5.4 更新分类（管理员）
-- `PUT /api/admin/categories/{id}`
+### 4.4 下线
+- `POST /api/article/offline/{id}`
+- 需登录，且为作者本人
 
-### 5.5 删除分类（管理员）
-- `DELETE /api/admin/categories/{id}`
+### 4.5 删除
+- `DELETE /api/article/{id}`
+- 需登录，且为作者本人
 
-### 5.6 新增标签（管理员）
-- `POST /api/admin/tags`
+### 4.6 触发单个文章索引重建
+- `POST /api/article/rebuild-index/{id}`
+- 需登录
 
-### 5.7 更新标签（管理员）
-- `PUT /api/admin/tags/{id}`
-
-### 5.8 删除标签（管理员）
-- `DELETE /api/admin/tags/{id}`
-
----
-
-## 6. 评论模块
-
-### 6.1 发表评论
-- `POST /api/articles/{articleId}/comments`
-
-### 6.2 回复评论
-- `POST /api/comments/{commentId}/reply`
-
-### 6.3 查询文章评论树
-- `GET /api/articles/{articleId}/comments`
-
-### 6.4 删除我的评论
-- `DELETE /api/comments/{commentId}`
-
-### 6.5 评论审核分页（管理员）
-- `GET /api/admin/comments`
-
-参数：
-- `status`
-- `articleId`
-- `userId`
-
-### 6.6 审核通过
-- `POST /api/admin/comments/{commentId}/approve`
-
-### 6.7 审核拒绝
-- `POST /api/admin/comments/{commentId}/reject`
+> 当前 `ArticleServiceImpl.rebuildSearchIndex` 已被声明，但路由未在 `ArticleController` 暴露。可以通过调用 `ArticleEventProducer.sendArticleEvent(REBUILD_INDEX)` 实现单条重建。
 
 ---
 
-## 7. 搜索模块
+## 5. 评论模块
 
-### 7.1 全文搜索
-- `GET /api/search/articles`
+### 5.1 发表评论
+- `POST /api/comment/create`
+- Body: `{articleId, content, parentId?, replyToId?, replyToUid?}`
+- 需登录
 
-参数：
-- `keyword`
-- `pageNum`
-- `pageSize`
-- `categoryId`
-- `tagId`
-- `sortBy`
+### 5.2 删除评论
+- `DELETE /api/comment/{id}`
+- 需登录，且为评论作者
 
-### 7.2 重建全文索引（管理员）
-- `POST /api/admin/search/rebuild`
+### 5.3 文章评论树
+- `GET /api/comment/article/{articleId}?page=1&size=20`
+- 公开
 
-### 7.3 查询索引重建任务状态（管理员）
-- `GET /api/admin/search/rebuild/tasks/{taskId}`
+### 5.4 文章点赞
+- `POST /api/article/like/{articleId}`
+- 需登录
+
+### 5.5 取消文章点赞
+- `DELETE /api/article/like/{articleId}`
+- 需登录
+
+### 5.6 文章收藏
+- `POST /api/article/collect/{articleId}`
+- 需登录
+
+### 5.7 取消文章收藏
+- `DELETE /api/article/collect/{articleId}`
+- 需登录
+
+### 5.8 文章统计（点赞/收藏/评论 + 个人是否已点赞/收藏）
+- `GET /api/article/stats/{articleId}`
+- 公开
 
 ---
 
-## 8. 通知模块
+## 6. 搜索模块
 
-### 8.1 我的通知列表
-- `GET /api/notifications`
+### 6.1 全文搜索
+- `GET /api/search?keyword=&categoryId=&tagId=&sortBy=&sortOrder=&page=1&size=10`
+  - `sortBy`: `relevance` | `viewCount` | `likeCount` | `publishedAt`
+  - `sortOrder`: `asc` | `desc`
+- 公开
 
-### 8.2 标记已读
-- `POST /api/notifications/{id}/read`
+### 6.2 创建索引
+- `POST /api/search/index/create`
+- 公开（生产环境应加管理员校验）
 
-### 8.3 全部已读
-- `POST /api/notifications/read-all`
-
-### 8.4 未读数量
-- `GET /api/notifications/unread-count`
+### 6.3 全量重建索引
+- `POST /api/search/index/rebuild`
+- 公开（生产环境应加管理员校验）
 
 ---
 
-## 9. 统计模块
+## 7. 通知模块
 
-### 9.1 作者仪表盘
-- `GET /api/author/dashboard`
+### 7.1 我的通知
+- `GET /api/notification/list?page=1&size=20`
+- 需登录
 
-### 9.2 管理后台仪表盘
+### 7.2 标记已读
+- `POST /api/notification/read/{id}`
+- 需登录
+
+### 7.3 全部已读
+- `POST /api/notification/read/all`
+- 需登录
+
+### 7.4 未读数
+- `GET /api/notification/unread/count`
+- 需登录
+
+---
+
+## 8. 统计模块
+
+### 8.1 仪表盘
+- `GET /api/stats/dashboard`
+- 公开（生产应加管理员校验）
+
+### 8.2 热门文章
+- `GET /api/stats/hot?days=7&limit=10`
+- 公开
+
+### 8.3 作者热度
+- `GET /api/stats/author/{authorId}?limit=10`
+- 公开
+
+### 8.4 记录 PV
+- `POST /api/stats/pv`
+- Body: `{articleId, ip?}`
+- 公开
+
+---
+
+## 9. 管理后台
+
+### 9.1 仪表盘
 - `GET /api/admin/dashboard`
+- 需登录，且为管理员
 
-### 9.3 文章统计详情
-- `GET /api/author/articles/{articleId}/stats`
+### 9.2 用户列表
+- `GET /api/admin/user/list?page=1&size=20&keyword=`
+- 需管理员
+
+### 9.3 修改用户
+- `PUT /api/admin/user/update`
+- Body: `{userId, role?, status?}`
+- 需管理员
+
+### 9.4 禁用用户
+- `POST /api/admin/user/disable/{userId}`
+- 需管理员
+
+### 9.5 文章列表
+- `GET /api/admin/article/list?page=1&size=20&keyword=&authorId=&status=`
+- 需管理员
+
+### 9.6 下架文章
+- `POST /api/admin/article/offline/{id}`
+- 需管理员
+
+### 9.7 删除文章
+- `DELETE /api/admin/article/{id}`
+- 需管理员
+
+### 9.8 待审核评论
+- `GET /api/admin/comment/pending?page=1&size=20`
+- 需管理员
+
+### 9.9 评论审核
+- `POST /api/admin/comment/audit/{id}?approve=true|false`
+- 需管理员
+
+### 9.10 删除评论
+- `DELETE /api/admin/comment/{id}`
+- 需管理员
+
+### 9.11 创建分类
+- `POST /api/admin/category/create`
+- Body: `{name, slug, description?, sortOrder?}`
+- 需管理员
+
+### 9.12 更新分类
+- `PUT /api/admin/category/update`
+- Body: `{id, name?, slug?, description?, sortOrder?}`
+- 需管理员
+
+### 9.13 删除分类
+- `DELETE /api/admin/category/{id}`
+- 需管理员
+
+### 9.14 创建标签
+- `POST /api/admin/tag/create`
+- Body: `{name, slug}`
+- 需管理员
+
+### 9.15 更新标签
+- `PUT /api/admin/tag/update`
+- Body: `{id, name?, slug?}`
+- 需管理员
+
+### 9.16 删除标签
+- `DELETE /api/admin/tag/{id}`
+- 需管理员
 
 ---
 
-## 10. 文件上传模块
+## 10. 公共
 
-### 10.1 上传封面图
-- `POST /api/files/upload/cover`
+### 10.1 健康检查
+- `GET /actuator/health`
+- 公开
 
-### 10.2 上传正文图片
-- `POST /api/files/upload/content-image`
-
----
-
-## 11. 后台管理模块
-
-### 11.1 用户分页
-- `GET /api/admin/users`
-
-### 11.2 用户状态修改
-- `POST /api/admin/users/{id}/status`
-
-### 11.3 角色配置
-- `PUT /api/admin/users/{id}/roles`
-
-### 11.4 文章管理分页
-- `GET /api/admin/articles`
-
-### 11.5 强制下线文章
-- `POST /api/admin/articles/{id}/offline`
+### 10.2 应用信息
+- `GET /actuator/info`
+- 公开
 
 ---
 
-## 12. 接口开发要求
+## 11. 接口开发约束
 
-- 所有写接口都要做参数校验
-- 所有鉴权接口统一从 SecurityContext 获取当前用户
-- 列表接口统一支持分页
-- 后台接口统一 RBAC 权限控制
-- 出参与入参分离，不能直接返回 DO
-- 错误码统一管理
-
----
-
-## 13. 推荐实现顺序
-
-### 第一批
-- auth
-- article 基础 CRUD
-- category/tag
-- article 列表/详情
-
-### 第二批
-- comment
-- notification
-- stats
-
-### 第三批
-- search
-- rebuild
-- admin dashboard
-
-### 第四批
-- upload
-- 限流
-- 审计日志
+- 所有写接口必须 `@Valid` 校验
+- 列表接口统一分页（`page` 从 1 起）
+- 出参与入参严格分离，**禁止直接返回 `DO`**
+- 错误码统一在 `ErrorCode` 枚举中
+- 鉴权通过 `LoginUserHolder.get()` 获取当前用户，宁可早抛 `UNAUTHORIZED`

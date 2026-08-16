@@ -1,20 +1,21 @@
 package com.pureblog.app.config;
 
-import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Info;
-import org.springdoc.core.models.GroupedOpenApi;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.lang.reflect.Method;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadPoolExecutor;
 
+@Slf4j
 @Configuration
-public class AppConfig {
+public class AppConfig implements AsyncConfigurer {
 
-    @Bean(name = "taskExecutor")
-    public Executor taskExecutor() {
+    @Bean(name = "asyncExecutor")
+    public Executor asyncExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(8);
         executor.setMaxPoolSize(16);
@@ -28,20 +29,15 @@ public class AppConfig {
         return executor;
     }
 
-    @Bean
-    public GroupedOpenApi portalApi() {
-        return GroupedOpenApi.builder()
-                .group("Portal APIs")
-                .pathsToMatch("/api/**")
-                .build();
+    @Override
+    public Executor getAsyncExecutor() {
+        return asyncExecutor();
     }
 
-    @Bean
-    public OpenAPI customOpenAPI() {
-        return new OpenAPI()
-                .info(new Info()
-                        .title("PureBlog API")
-                        .version("1.0.0")
-                        .description("PureBlog - 技术博客平台 API 文档"));
+    @Override
+    public org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
+        return (Throwable ex, Method method, Object... params) -> {
+            log.error("Async method {} threw exception", method.getName(), ex);
+        };
     }
 }

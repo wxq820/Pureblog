@@ -1,91 +1,145 @@
-# PureBlog Cursor 开发指导包
+# PureBlog
 
-这是一套可直接提供给 Cursor 的项目指导文件，目标不是只做一个“普通博客”，而是做一个**能体现后端技术深度、又能真实落地**的个人技术品牌项目。
+一个面向内容平台场景的 Spring Boot 3 多模块博客系统。围绕**文章发布链路、全文搜索链路、热点读取链路**展示缓存、异步事件、全文检索、最终一致性与可观测能力。
 
 ## 1. 项目定位
 
-PureBlog 的本质定位不是“写文章的网站”，而是一个具备以下特征的内容平台：
+PureBlog 不是"写文章的网站"，而是一个具备工程表达力的内容平台：
 
-- 对外：支持文章展示、全文搜索、评论互动、热榜、个人主页、关注通知
-- 对内：支持文章管理、分类标签管理、评论审核、用户与权限管理、运营统计
-- 对技术展示：突出 MySQL、Redis、Kafka、Elasticsearch、Spring Boot、MyBatis-Plus、并发编程、JVM 观测与调优
-- 对工程实践：强调缓存一致性、最终一致性、异步解耦、幂等消费、可观测性、Docker 化部署
+- 对外：文章展示、全文搜索、评论互动、点赞收藏、关注通知
+- 对内：文章管理、分类标签管理、评论审核、用户与角色管理、运营统计
+- 技术上：Spring Boot 3 + MySQL + Redis + Elasticsearch + Spring 事件驱动
+- 工程上：缓存一致性、事件驱动、最终一致性、可观测、容器化部署
 
-## 2. 开发原则
+## 2. 技术栈一览
 
-本项目采用 **“可演进的模块化单体 + 异步事件驱动”** 方案：
+| 类别 | 选型 |
+| --- | --- |
+| 语言 | Java 17 |
+| 框架 | Spring Boot 3.2.5 |
+| 持久化 | MySQL 8.0 + MyBatis-Plus 3.5.11 |
+| 缓存 | Redis 7 + 自定义 `RedisTemplate` + Lettuce 连接池 |
+| 搜索 | Elasticsearch 8 + `co.elastic.clients` Java Client |
+| 异步 | Spring `ApplicationEventPublisher` + `@EventListener` + `@EnableAsync` |
+| 鉴权 | JWT (jjwt 0.12.6) + 自定义 `AuthInterceptor` |
+| 安全 | Spring Security 3（仅做 CSRF/CORS 关闭，鉴权走自定义拦截器） |
+| 密码 | Spring Security `DelegatingPasswordEncoder` (BCrypt) |
+| 前端 | Vue 3 + TypeScript + Vite + Pinia + Vue Router + Element Plus |
+| 工具 | Hutool、Lombok、Day.js |
 
-- 第一阶段：单仓、单后端应用、多业务模块，快速做出完整闭环
-- 第二阶段：将搜索同步、通知、统计拆成独立进程或独立服务
-- 第三阶段：如有需要，再引入 Dubbo 做服务间 RPC 演示
+### 关于异步消息
 
-这样做的好处：
+代码中**没有使用 Kafka**。所有"发布后异步处理"通过 Spring `ApplicationEventPublisher` 在同一 JVM 进程内分发，由 `@EventListener` 监听。事件定义在 `pureblog-common` 的 `event/` 包下：
 
-1. 先把可演示的功能闭环跑通  
-2. 再逐步引入中间件与复杂技术点  
-3. 面试时可以同时讲清“为什么先不拆”和“后续如何拆”
+- `ArticleEvent` —— 文章发布/更新/下线/删除
+- `CommentCreatedEvent` —— 评论创建
+- `FollowCreatedEvent` —— 关注关系
+- `StatsLikeArticleEvent` —— 文章点赞
+- `StatsPvEvent` —— 文章浏览
 
-## 3. 推荐阅读顺序
+监听器在 `pureblog-search` 与 `pureblog-notification` 子模块内的 `listener/` 包下。
 
-请按以下顺序让 Cursor 读取和执行：
+## 3. 仓库结构
 
-1. `docs/00_项目总览.md`
-2. `docs/01_技术栈与技术背景.md`
-3. `docs/02_系统架构设计.md`
-4. `docs/03_项目目录建议.md`
-5. `docs/04_数据库设计.sql`
-6. `docs/05_核心业务流程.md`
-7. `docs/06_API接口清单.md`
-8. `docs/07_开发任务拆解.md`
-9. `docs/08_非功能需求与技术亮点.md`
-10. `docs/09_Cursor协作规则.md`
-11. `docs/10_Cursor开发Prompt模板.md`
-12. `docs/11_阶段性交付与验收清单.md`
+```text
+Pureblog/
+├── backend/                          # Spring Boot 后端
+│   ├── pom.xml                       # 父 POM（聚合所有模块）
+│   ├── pureblog-app/                 # 主启动模块
+│   ├── pureblog-common/              # 公共：响应、异常、事件、拦截器、枚举、工具
+│   ├── pureblog-auth/                # 登录、注册、JWT、登录日志
+│   ├── pureblog-user/                # 用户资料、关注关系
+│   ├── pureblog-article/             # 文章、分类、标签、文章缓存
+│   ├── pureblog-comment/             # 评论、点赞、收藏
+│   ├── pureblog-search/              # Elasticsearch 索引同步与查询
+│   ├── pureblog-notification/        # 站内通知
+│   ├── pureblog-stats/               # PV/UV、热榜、仪表盘
+│   └── pureblog-admin/               # 管理后台（用户/文章/评论/分类/标签）
+├── frontend/
+│   ├── pureblog-portal/              # 门户站点（Vue 3 + TS）
+│   └── pureblog-admin-web/           # 管理后台（Vue 3 + TS + Element Plus）
+├── docs/                             # 设计文档（与代码同步）
+├── deploy/                           # Docker Compose 部署文件
+└── scripts/                          # 启动/停止/初始化脚本
+```
 
-## 4. 开发边界
+## 4. 快速开始
 
-### 第一阶段必须完成
-- 用户注册、登录、JWT 鉴权、RBAC 基础权限
-- 文章分类、标签、草稿、发布、下线、删除
-- 文章详情、文章列表、文章搜索
-- 评论发布、评论树、评论审核
-- Redis 缓存、PV 计数、热点榜单
-- Kafka 异步事件：发布文章后的索引同步、通知、统计刷新
-- Elasticsearch 全文检索与高亮
-- 管理后台基础页面
-- Docker Compose 本地部署
+### 4.1 启动基础设施
 
-### 第二阶段建议完成
-- Outbox Pattern
-- 幂等消费
-- 限流与防刷
-- Micrometer + Prometheus + Grafana
-- MinIO 文件上传
-- 灰度发布/索引重建脚本
+```bash
+cd deploy
+docker compose -f docker-compose.dev.yml up -d
+```
 
-### 第三阶段可选增强
-- Dubbo 服务化拆分
-- 多级缓存（Caffeine + Redis）
-- 链路追踪（SkyWalking）
-- Kubernetes 演示部署
+只启动 MySQL 和 Redis 即可。Elasticsearch 启动需要单独配置：
 
-## 5. 给 Cursor 的总要求
+```bash
+docker run -d --name pureblog-es \
+  -p 9200:9200 -e "discovery.type=single-node" \
+  -e "ES_JAVA_OPTS=-Xms512m -Xmx512m" \
+  docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+```
 
-- 严格遵循本指导包，不能随意更改核心表结构、接口风格和模块边界
-- 优先输出**完整可运行代码文件**，不要只给片段
-- 所有新增字段、表、接口都必须同步更新相关文档
-- 基础 CRUD 用 MyBatis-Plus，复杂查询允许使用 XML
-- 统一异常、统一返回结构、统一日志规范
-- 不要为了“炫技”引入没有业务支撑的复杂度
+### 4.2 初始化数据库
 
-## 6. 目录说明
+```bash
+mysql -uroot -p123456 < scripts/schema.sql
+```
 
-- `docs/`：核心指导文件
-- `.cursor/rules/`：可直接喂给 Cursor 的规则文件
-- `deploy/`：本地环境与部署模板
+### 4.3 启动后端
 
-## 7. 最终目标
+```bash
+cd backend
+mvn -pl pureblog-app -am spring-boot:run
+```
 
-你可以把这个项目包装成一个：
+默认管理员：`admin / admin123`（脚本 seed 数据）。
 
-> 面向内容平台场景的高性能博客系统，围绕发布链路、搜索链路、热点读取链路，展示缓存、异步事件、全文检索、最终一致性与 JVM 调优能力。
+### 4.4 启动前端
+
+```bash
+cd frontend/pureblog-portal
+npm install && npm run dev    # 门户 http://localhost:5173
+
+cd ../pureblog-admin-web
+npm install && npm run dev    # 管理后台 http://localhost:5174
+```
+
+### 4.2.1 新增「目录树」表 (一次性,Tree 模块启用前必做)
+
+`pureblog` 库需要手动执行 `backend/sql/init_tree.sql`,新增 `pb_tree`、`pb_tree_node`,并给 `pb_article` 加 `tree_node_id`/`tree_id` 字段,同时灌一棵「Java 技术栈」初始树:
+
+```bash
+mysql -uroot -p123456 pureblog < backend/sql/init_tree.sql
+```
+
+## 5. 文档导览
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/00_项目总览.md](docs/00_项目总览.md) | 项目定位、目标、模块、技术表达 |
+| [docs/01_技术栈与技术背景.md](docs/01_技术栈与技术背景.md) | 完整选型与理由 |
+| [docs/02_系统架构设计.md](docs/02_系统架构设计.md) | 当前架构与三条核心链路 |
+| [docs/03_项目目录建议.md](docs/03_项目目录建议.md) | 实际目录结构与命名规范 |
+| [docs/04_数据库设计.sql](docs/04_数据库设计.sql) | 完整建表脚本 |
+| [docs/05_核心业务流程.md](docs/05_核心业务流程.md) | 发布/读取/搜索/评论/统计流程 |
+| [docs/06_API接口清单.md](docs/06_API接口清单.md) | 当前所有 HTTP 接口 |
+| [docs/07_开发任务拆解.md](docs/07_开发任务拆解.md) | 阶段、任务、优先级 |
+| [docs/08_非功能需求与技术亮点.md](docs/08_非功能需求与技术亮点.md) | 性能、可用性、可观测性 |
+| [docs/09_Cursor协作规则.md](docs/09_Cursor协作规则.md) | 给 Cursor 的硬性约束 |
+| [docs/10_Cursor开发Prompt模板.md](docs/10_Cursor开发Prompt模板.md) | 可直接复制给 Cursor 的 Prompt |
+| [docs/11_阶段性交付与验收清单.md](docs/11_阶段性交付与验收清单.md) | 验收清单 |
+| [docs/12_建议的简历表达.md](docs/12_建议的简历表达.md) | 简历要点与面试表达 |
+
+## 6. 核心链路速览
+
+1. **发布链路**：作者发布 → 写 MySQL → 失效详情缓存 → 发布 `ArticleEvent` → 搜索模块同步索引 + 通知模块给关注者发通知
+2. **读取链路**：访问详情 → 查 Redis → 未命中回源 MySQL → 回填 Redis → 自增 PV（Redis 计数器）
+3. **搜索链路**：用户搜索 → `SearchService` 直接查 ES → 高亮返回 → 点击走详情缓存链路
+4. **热点链路**：浏览 + 点赞事件实时累加 Redis ZSet 中的热度分 → 定时从 MySQL 全量刷新兜底
+
+## 7. 测试账号
+
+- 超管：`admin / admin123`
+- 普通用户：注册即可

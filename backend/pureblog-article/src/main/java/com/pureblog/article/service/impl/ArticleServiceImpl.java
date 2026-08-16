@@ -21,6 +21,8 @@ import com.pureblog.common.exception.BusinessException;
 import com.pureblog.common.result.PageResult;
 import com.pureblog.common.utils.DateUtils;
 import com.pureblog.common.utils.StringUtils;
+import com.pureblog.tree.entity.TreeNodeDO;
+import com.pureblog.tree.service.TreeService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +44,7 @@ public class ArticleServiceImpl implements ArticleService {
     private final UserMapper userMapper;
     private final ArticleCacheManager cacheManager;
     private final ArticleEventProducer eventProducer;
+    private final TreeService treeService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -52,9 +55,14 @@ public class ArticleServiceImpl implements ArticleService {
         CategoryDO category = categoryMapper.selectById(dto.getCategoryId());
         if (category == null) throw new BusinessException(ErrorCode.CATEGORY_NOT_FOUND);
 
+        treeService.assertIsLeaf(dto.getTreeNodeId());
+        TreeNodeDO treeNode = treeService.getNodeById(dto.getTreeNodeId());
+
         ArticleDO article = new ArticleDO();
         article.setAuthorId(userId);
         article.setCategoryId(dto.getCategoryId());
+        article.setTreeId(treeNode.getTreeId());
+        article.setTreeNodeId(dto.getTreeNodeId());
         article.setTitle(dto.getTitle());
         article.setSummary(dto.getSummary());
         article.setCoverUrl(dto.getCoverUrl());
@@ -69,6 +77,7 @@ public class ArticleServiceImpl implements ArticleService {
 
         saveContent(article.getId(), dto.getContent(), dto.getHtmlContent());
         saveTags(article.getId(), dto.getTagIds());
+        treeService.incrementArticleCount(dto.getTreeNodeId());
 
         log.info("Article created: id={}, author={}", article.getId(), userId);
         return getArticleDetail(article.getId());
@@ -84,15 +93,27 @@ public class ArticleServiceImpl implements ArticleService {
         if (article == null) throw new BusinessException(ErrorCode.ARTICLE_NOT_FOUND);
         if (!article.getAuthorId().equals(userId)) throw new BusinessException(ErrorCode.NOT_AUTHOR);
 
+        treeService.assertIsLeaf(dto.getTreeNodeId());
+        TreeNodeDO treeNode = treeService.getNodeById(dto.getTreeNodeId());
+
+        Long previousNodeId = article.getTreeNodeId();
+
         article.setTitle(dto.getTitle());
         article.setSummary(dto.getSummary());
         article.setCoverUrl(dto.getCoverUrl());
         article.setCategoryId(dto.getCategoryId());
+        article.setTreeId(treeNode.getTreeId());
+        article.setTreeNodeId(dto.getTreeNodeId());
         articleMapper.updateById(article);
 
         updateContent(dto.getId(), dto.getContent(), dto.getHtmlContent());
         updateTags(dto.getId(), dto.getTagIds());
         cacheManager.evictArticleDetail(dto.getId());
+
+        if (previousNodeId != null && !previousNodeId.equals(dto.getTreeNodeId())) {
+            treeService.decrementArticleCount(previousNodeId);
+            treeService.incrementArticleCount(dto.getTreeNodeId());
+        }
 
         log.info("Article updated: id={}", dto.getId());
         return getArticleDetail(dto.getId());
@@ -193,6 +214,7 @@ public class ArticleServiceImpl implements ArticleService {
                 .eq(UserDO::getId, userId).setSql("article_count = GREATEST(article_count - 1, 0)"));
         categoryMapper.update(null, new LambdaUpdateWrapper<CategoryDO>()
                 .eq(CategoryDO::getId, article.getCategoryId()).setSql("article_count = GREATEST(article_count - 1, 0)"));
+        treeService.decrementArticleCount(article.getTreeNodeId());
 
         log.info("Article deleted: id={}", articleId);
     }
@@ -234,8 +256,12 @@ public class ArticleServiceImpl implements ArticleService {
             default -> "published_at";
         };
         wrapper.orderByDesc(ArticleDO::getIsTop)
-                .orderByDesc(ArticleDO::getViewCount)
-                .orderByDesc(query.getSortOrder().equals("asc") ? ArticleDO::getPublishedAt : null);
+                .orderByDesc(ArticleDO::getViewCount);
+        if (query.getSortOrder() != null && query.getSortOrder().equalsIgnoreCase("asc")) {
+            wrapper.orderByAsc(ArticleDO::getPublishedAt);
+        } else {
+            wrapper.orderByDesc(ArticleDO::getPublishedAt);
+        }
 
         Page<ArticleDO> page = new Page<>((long) query.getPage(), (long) query.getSize());
         Page<ArticleDO> result = articleMapper.selectPage(page, wrapper);

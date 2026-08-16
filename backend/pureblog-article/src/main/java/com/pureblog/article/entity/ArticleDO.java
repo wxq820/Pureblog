@@ -15,6 +15,8 @@ public class ArticleDO extends BaseDO {
     
     private Long authorId;
     private Long categoryId;
+    private Long treeId;
+    private Long treeNodeId;
     private String title;
     private String summary;
     private String coverUrl;

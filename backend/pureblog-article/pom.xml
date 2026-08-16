@@ -23,8 +23,8 @@
             <artifactId>pureblog-auth</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
+            <groupId>com.pureblog</groupId>
+            <artifactId>pureblog-tree</artifactId>
         </dependency>
     </dependencies>
 </project>

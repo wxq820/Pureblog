@@ -147,3 +147,25 @@ export interface NotificationVO {
   createdAt: string
   relativeTime: string
 }
+
+export interface SkillTreeNode {
+  id: number | string
+  treeId?: number
+  parentId?: number | null
+  name: string
+  level?: number
+  color?: string
+  link?: string
+  children?: SkillTreeNode[]
+  articleCount?: number
+  depth?: number
+}
+
+export interface SkillTreeSummary {
+  id: number
+  code: string
+  name: string
+  description?: string
+  coverColor?: string
+  root?: SkillTreeNode
+}

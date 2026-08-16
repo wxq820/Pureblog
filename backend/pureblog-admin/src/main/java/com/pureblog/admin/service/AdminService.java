@@ -32,4 +32,7 @@ public interface AdminService {
     void deleteComment(Long commentId);
 
     List<AdminCommentVO> getPendingCommentCount();
+
+    /** 校验当前登录用户是管理员,否则抛 FORBIDDEN. */
+    void requireAdmin();
 }

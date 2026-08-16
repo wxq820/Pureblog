@@ -21,7 +21,10 @@ public class ArticleUpdateDTO {
     
     @NotNull(message = "分类ID不能为空")
     private Long categoryId;
-    
+
+    @NotNull(message = "目录树叶子节点ID不能为空")
+    private Long treeNodeId;
+
     private List<Long> tagIds;
     
     @NotBlank(message = "正文不能为空")

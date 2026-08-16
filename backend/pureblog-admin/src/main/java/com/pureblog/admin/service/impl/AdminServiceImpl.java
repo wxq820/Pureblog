@@ -188,6 +188,11 @@ public class AdminServiceImpl implements AdminService {
         }
     }
 
+    @Override
+    public void requireAdmin() {
+        checkAdmin();
+    }
+
     private AdminUserVO toUserVO(UserDO user) {
         return AdminUserVO.builder()
                 .id(user.getId())

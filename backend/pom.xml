@@ -10,7 +10,7 @@
     <packaging>pom</packaging>
 
     <name>PureBlog</name>
-    <description>PureBlog - A technical blog platform for showcasing backend engineering capability</description>
+    <description>PureBlog - A technical blog platform</description>
 
     <modules>
         <module>pureblog-common</module>
@@ -21,6 +21,7 @@
         <module>pureblog-search</module>
         <module>pureblog-notification</module>
         <module>pureblog-stats</module>
+        <module>pureblog-tree</module>
         <module>pureblog-admin</module>
         <module>pureblog-app</module>
     </modules>
@@ -31,16 +32,10 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>3.2.5</spring-boot.version>
-        <spring-cloud.version>2023.0.1</spring-cloud.version>
-        <mybatis-plus.version>3.5.7</mybatis-plus.version>
+        <mybatis-plus.version>3.5.11</mybatis-plus.version>
         <jwt.version>0.12.6</jwt.version>
-        <elasticsearch.version>8.13.4</elasticsearch.version>
-        <kafka.version>3.7.1</kafka.version>
         <hutool.version>5.8.29</hutool.version>
-        <guava.version>33.2.1-jre</guava.version>
         <lombok.version>1.18.32</lombok.version>
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <druid.version>1.2.23</druid.version>
     </properties>
 
     <dependencyManagement>
@@ -55,7 +50,7 @@
 
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
                 <version>${mybatis-plus.version}</version>
             </dependency>
 
@@ -76,45 +71,15 @@
             </dependency>
 
             <dependency>
-                <groupId>co.elastic.clients</groupId>
-                <artifactId>elasticsearch-java</artifactId>
-                <version>${elasticsearch.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.kafka</groupId>
-                <artifactId>kafka-clients</artifactId>
-                <version>${kafka.version}</version>
-            </dependency>
-
-            <dependency>
                 <groupId>cn.hutool</groupId>
-                <artifactId>hutool-all</artifactId>
+                <artifactId>hutool-core</artifactId>
                 <version>${hutool.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.google.guava</groupId>
-                <artifactId>guava</artifactId>
-                <version>${guava.version}</version>
             </dependency>
 
             <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.mapstruct</groupId>
-                <artifactId>mapstruct</artifactId>
-                <version>${mapstruct.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>com.alibaba</groupId>
-                <artifactId>druid-spring-boot-3-starter</artifactId>
-                <version>${druid.version}</version>
             </dependency>
 
             <!-- Internal modules -->
@@ -160,6 +125,11 @@
             </dependency>
             <dependency>
                 <groupId>com.pureblog</groupId>
+                <artifactId>pureblog-tree</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pureblog</groupId>
                 <artifactId>pureblog-admin</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -167,7 +137,6 @@
     </dependencyManagement>
 
     <dependencies>
-        <!-- All modules get these -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
@@ -189,21 +158,12 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <parameters>true</parameters>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                             <version>${lombok.version}</version>
-                        </path>
-                        <path>
-                            <groupId>org.mapstruct</groupId>
-                            <artifactId>mapstruct-processor</artifactId>
-                            <version>${mapstruct.version}</version>
-                        </path>
-                        <path>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok-mapstruct-binding</artifactId>
-                            <version>0.2.0</version>
                         </path>
                     </annotationProcessorPaths>
                 </configuration>

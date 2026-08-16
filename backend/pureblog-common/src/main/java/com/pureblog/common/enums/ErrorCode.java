@@ -34,6 +34,14 @@ public enum ErrorCode {
     TAG_EXISTS(3006, "标签已存在"),
     CATEGORY_EXISTS(3007, "分类已存在"),
 
+    // 目录树相关 6000-6999
+    TREE_NOT_FOUND(6001, "目录树不存在"),
+    TREE_CODE_EXISTS(6002, "目录树编码已存在"),
+    TREE_NODE_NOT_FOUND(6003, "目录树节点不存在"),
+    TREE_NODE_NOT_LEAF(6004, "只能在叶子节点下挂文章"),
+    TREE_NODE_HAS_CHILDREN(6005, "该节点下存在子节点,无法删除"),
+    TREE_NODE_HAS_ARTICLES(6006, "该节点下存在文章,无法删除"),
+
     // 评论相关 4000-4999
     COMMENT_NOT_FOUND(4001, "评论不存在"),
     PARENT_COMMENT_NOT_FOUND(4002, "父评论不存在"),

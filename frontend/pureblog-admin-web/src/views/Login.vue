@@ -49,7 +49,10 @@ async function handleLogin() {
   display: flex;
   justify-content: center;
   align-items: center;
+  width: 100vw;
   min-height: 100vh;
+  position: fixed;
+  inset: 0;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 .login-box {
@@ -57,7 +60,9 @@ async function handleLogin() {
   padding: 40px;
   border-radius: 12px;
   width: 400px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  margin: auto;
 }
 .login-box h2 { text-align: center; margin-bottom: 24px; }
 </style>

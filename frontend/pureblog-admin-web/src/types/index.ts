@@ -64,3 +64,29 @@ export interface AdminCommentVO {
   status: string
   createdAt: string
 }
+
+export interface TreeNodeVO {
+  id: number
+  treeId: number
+  parentId: number
+  name: string
+  color?: string
+  sortOrder: number
+  depth: number
+  articleCount: number
+  children?: TreeNodeVO[]
+}
+
+export interface TreeVO {
+  id: number
+  code: string
+  name: string
+  description?: string
+  coverColor?: string
+  sortOrder: number
+  status: number
+  createdAt?: string
+  updatedAt?: string
+  root?: TreeNodeVO
+  nodes?: TreeNodeVO[]
+}

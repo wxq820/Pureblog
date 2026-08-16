@@ -3,7 +3,7 @@
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
 
     <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"/>
-    <property name="LOG_PATH" value="./logs"/>
+    <property name="LOG_PATH" value="${LOGGING_FILE_PATH:-./logs}"/>
 
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
@@ -45,9 +45,6 @@
     </appender>
 
     <logger name="com.pureblog" level="DEBUG"/>
-    <logger name="org.springframework.kafka" level="WARN"/>
-    <logger name="co.elastic.clients" level="WARN"/>
-    <logger name="org.elasticsearch" level="WARN"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

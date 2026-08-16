@@ -9,6 +9,12 @@
         <router-link to="/article/list" class="menu-item" active-class="active">
           文章管理
         </router-link>
+        <router-link to="/article/edit" class="menu-item" active-class="active">
+          写文章
+        </router-link>
+        <router-link to="/tree/manage" class="menu-item" active-class="active">
+          目录树管理
+        </router-link>
         <router-link to="/comment/audit" class="menu-item" active-class="active">
           评论审核
         </router-link>

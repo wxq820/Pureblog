@@ -22,14 +22,15 @@ import com.pureblog.auth.mapper.UserMapper;
 import com.pureblog.article.entity.CategoryDO;
 import com.pureblog.article.mapper.CategoryMapper;
 import com.pureblog.common.enums.ArticleStatus;
+import com.pureblog.article.event.ArticleEvent;
 import com.pureblog.search.document.ArticleDocument;
 import com.pureblog.search.dto.SearchRequest;
-import com.pureblog.search.event.ArticleEvent;
 import com.pureblog.search.service.SearchService;
 import com.pureblog.search.vo.SearchResult;
 import com.pureblog.search.vo.SearchVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -334,6 +335,21 @@ public class SearchServiceImpl implements SearchService {
             }
         } catch (IOException e) {
             log.error("Failed to check index existence", e);
+        }
+    }
+
+    @EventListener
+    public void onArticleEvent(ArticleEvent event) {
+        try {
+            log.info("Received article event: type={}, articleId={}", event.getEventType(), event.getArticleId());
+            switch (event.getEventType()) {
+                case "PUBLISHED" -> indexArticle(event);
+                case "OFFLINE", "DELETED" -> deleteArticleIndex(event.getArticleId());
+                case "REBUILD_INDEX" -> rebuildArticleIndex(event);
+                default -> log.warn("Unknown event type: {}", event.getEventType());
+            }
+        } catch (Exception e) {
+            log.error("Failed to process article event: articleId={}", event.getArticleId(), e);
         }
     }
 }

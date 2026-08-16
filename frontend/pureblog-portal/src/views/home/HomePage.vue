@@ -46,20 +46,30 @@
       </aside>
 
       <section class="tree-pane">
-        <SkillTree :tree="currentTree" class="skill-tree-section" />
+        <div v-if="trees.length > 1" class="tree-tabs">
+          <button
+            v-for="t in trees"
+            :key="t.code"
+            :class="['tree-tab-btn', { active: activeCode === t.code }]"
+            :style="{ borderBottomColor: activeCode === t.code ? (t.coverColor || 'var(--primary)') : 'transparent', color: activeCode === t.code ? (t.coverColor || 'var(--primary)') : 'inherit' }"
+            @click="switchTree(t.code)"
+          >{{ t.name }}</button>
+        </div>
+        <SkillTree v-if="activeTree" :tree="activeTree" class="skill-tree-section" />
+        <div v-else class="empty tree-empty text-secondary">暂无目录树</div>
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { articleApi } from '@/api/article'
+import { treeApi } from '@/api/tree'
 import ArticleCard from '@/components/ArticleCard.vue'
 import SkillTree from '@/components/SkillTree.vue'
-import { JAVA_SKILL_TREE } from '@/types/skillTree'
-import type { ArticleListVO } from '@/types'
+import type { ArticleListVO, SkillTreeSummary, SkillTreeNode } from '@/types'
 
 const router = useRouter()
 const searchKeyword = ref('')
@@ -71,7 +81,9 @@ const loading = ref(false)
 const page = ref(1)
 const hasMore = ref(true)
 
-const currentTree = computed(() => JAVA_SKILL_TREE)
+const trees = ref<SkillTreeSummary[]>([])
+const activeCode = ref<string>('')
+const activeTree = ref<any>(null)
 
 function doSearch() {
   if (searchKeyword.value.trim()) {
@@ -104,6 +116,46 @@ async function loadCategories() {
   categories.value = res.data
 }
 
+async function loadTrees() {
+  const res = await treeApi.listPublic()
+  trees.value = (res.data || []).map((t: any) => ({
+    id: t.id,
+    code: t.code,
+    name: t.name,
+    description: t.description,
+    coverColor: t.coverColor
+  }))
+  if (trees.value.length > 0 && !activeCode.value) {
+    activeCode.value = trees.value[0].code
+    await switchTree(activeCode.value)
+  }
+}
+
+async function switchTree(code: string) {
+  activeCode.value = code
+  const res = await treeApi.getPublicByCode(code)
+  activeTree.value = toSkillTreeShape(res.data)
+}
+
+function toSkillTreeShape(t: any) {
+  function convert(n: any, depth: number): SkillTreeNode {
+    return {
+      id: String(n.id),
+      treeId: n.treeId,
+      parentId: n.parentId || null,
+      name: n.name,
+      level: depth,
+      color: n.color,
+      children: (n.children || []).map((c: any) => convert(c, depth + 1))
+    } as SkillTreeNode
+  }
+  return {
+    id: String(t.id),
+    name: t.name,
+    root: convert(t.root, 0)
+  }
+}
+
 function loadMore() {
   page.value++
   loadArticles()
@@ -113,6 +165,13 @@ onMounted(() => {
   loadArticles()
   loadHot()
   loadCategories()
+  loadTrees()
+})
+
+watch(() => router.currentRoute.value.query.nodeId, (nodeId) => {
+  if (nodeId && activeTree.value) {
+    // 切到对应叶子节点的文章列表 - 当前仅路由传参占位,完整功能后续按需扩展.
+  }
 })
 </script>
 
@@ -133,9 +192,16 @@ onMounted(() => {
 
 .content-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 24px; min-height: 600px; }
 .left-sidebar { display: grid; grid-template-rows: 2fr 1fr; gap: 16px; min-width: 0; }
-.tree-pane { height: calc(100vh - 240px); min-height: 600px; min-width: 0; }
+.tree-pane { height: calc(100vh - 240px); min-height: 600px; min-width: 0; display: flex; flex-direction: column; }
 .left-sidebar .card { min-height: 0; overflow: auto; }
-.tree-pane .skill-tree-section { width: 100%; height: 100%; display: block; }
+.tree-pane .skill-tree-section { width: 100%; flex: 1; display: block; }
+
+.tree-tabs { display: flex; gap: 8px; padding: 0 16px; background: white; border-bottom: 1px solid var(--border); }
+.tree-tab-btn { background: transparent; border: none; padding: 12px 14px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 3px solid transparent; color: var(--text-secondary); transition: all 0.15s; }
+.tree-tab-btn:hover { color: var(--primary); }
+.tree-tab-btn.active { font-weight: 600; }
+
+.tree-empty { display: flex; align-items: center; justify-content: center; height: 100%; background: white; }
 
 .tab-header { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin: -16px -16px 12px; background: var(--bg-secondary); }
 .tab-btn { flex: 1; padding: 10px; background: transparent; border: none; cursor: pointer; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid transparent; transition: all 0.15s; }

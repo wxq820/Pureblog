@@ -17,17 +17,18 @@ import com.pureblog.comment.mapper.LikeMapper;
 import com.pureblog.comment.service.CommentService;
 import com.pureblog.comment.vo.ArticleStatsVO;
 import com.pureblog.comment.vo.CommentVO;
-import com.pureblog.common.constant.KafkaTopic;
 import com.pureblog.common.context.LoginUserHolder;
 import com.pureblog.common.enums.ArticleStatus;
 import com.pureblog.common.enums.CommentStatus;
 import com.pureblog.common.enums.ErrorCode;
 import com.pureblog.common.enums.LikeTargetType;
+import com.pureblog.common.event.CommentCreatedEvent;
+import com.pureblog.common.event.StatsLikeArticleEvent;
 import com.pureblog.common.exception.BusinessException;
 import com.pureblog.common.result.PageResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,7 @@ public class CommentServiceImpl implements CommentService {
     private final CollectMapper collectMapper;
     private final ArticleMapper articleMapper;
     private final UserMapper userMapper;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -78,16 +79,16 @@ public class CommentServiceImpl implements CommentService {
                 .eq(ArticleDO::getId, dto.getArticleId())
                 .setSql("comment_count = comment_count + 1"));
 
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "COMMENT_CREATED");
-        event.put("commentId", comment.getId());
-        event.put("articleId", dto.getArticleId());
-        event.put("articleAuthorId", article.getAuthorId());
-        event.put("commentUserId", userId);
-        event.put("content", dto.getContent());
-        event.put("parentId", dto.getParentId());
-        event.put("replyToUid", dto.getReplyToUid());
-        kafkaTemplate.send(KafkaTopic.COMMENT_EVENTS, String.valueOf(dto.getArticleId()), event);
+        CommentCreatedEvent event = new CommentCreatedEvent(
+                comment.getId(),
+                dto.getArticleId(),
+                article.getAuthorId(),
+                userId,
+                dto.getContent(),
+                dto.getParentId(),
+                dto.getReplyToUid()
+        );
+        eventPublisher.publishEvent(event);
 
         log.info("Comment created: id={}, articleId={}, userId={}", comment.getId(), dto.getArticleId(), userId);
         return buildCommentVO(comment);
@@ -143,7 +144,7 @@ public class CommentServiceImpl implements CommentService {
                 .eq(CommentDO::getStatus, CommentStatus.APPROVED.getCode())
                 .orderByAsc(CommentDO::getCreatedAt);
         List<CommentDO> replies = commentMapper.selectList(wrapper);
-        return replies.stream().map(r -> buildCommentVO(r)).collect(Collectors.toList());
+        return replies.stream().map(this::buildCommentVO).collect(Collectors.toList());
     }
 
     @Override
@@ -170,12 +171,11 @@ public class CommentServiceImpl implements CommentService {
                 .setSql("like_count = like_count + 1"));
 
         ArticleDO article = articleMapper.selectByIdSimple(articleId);
-        Map<String, Object> event = new HashMap<>();
-        event.put("eventType", "LIKE_ARTICLE");
-        event.put("articleId", articleId);
-        event.put("articleAuthorId", article != null ? article.getAuthorId() : null);
-        event.put("userId", userId);
-        kafkaTemplate.send(KafkaTopic.STATS_EVENTS, String.valueOf(articleId), event);
+        eventPublisher.publishEvent(new StatsLikeArticleEvent(
+                articleId,
+                article != null ? article.getAuthorId() : null,
+                userId
+        ));
 
         log.info("User {} liked article {}", userId, articleId);
     }

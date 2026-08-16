@@ -7,6 +7,7 @@ import com.pureblog.auth.mapper.UserMapper;
 import com.pureblog.common.context.LoginUserHolder;
 import com.pureblog.common.enums.ErrorCode;
 import com.pureblog.common.enums.UserRole;
+import com.pureblog.common.event.FollowCreatedEvent;
 import com.pureblog.common.exception.BusinessException;
 import com.pureblog.common.result.PageResult;
 import com.pureblog.user.dto.UserProfileDTO;
@@ -16,6 +17,7 @@ import com.pureblog.user.service.UserService;
 import com.pureblog.user.vo.UserProfileVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final FollowMapper followMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final String USER_CACHE_PREFIX = "pureblog:user:info:";
     private static final long USER_CACHE_TTL = 30;
@@ -117,6 +120,8 @@ public class UserServiceImpl implements UserService {
                 .eq(UserDO::getId, currentUserId).setSql("following_count = following_count + 1"));
         userMapper.update(null, new LambdaUpdateWrapper<UserDO>()
                 .eq(UserDO::getId, userId).setSql("follower_count = follower_count + 1"));
+
+        eventPublisher.publishEvent(new FollowCreatedEvent(currentUserId, userId));
 
         redisTemplate.delete(USER_CACHE_PREFIX + userId);
         log.info("User {} followed user {}", currentUserId, userId);

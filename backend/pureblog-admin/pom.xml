@@ -34,5 +34,9 @@
             <groupId>com.pureblog</groupId>
             <artifactId>pureblog-stats</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.pureblog</groupId>
+            <artifactId>pureblog-tree</artifactId>
+        </dependency>
     </dependencies>
 </project>

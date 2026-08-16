@@ -5,9 +5,6 @@ import com.pureblog.article.entity.ArticleDO;
 import com.pureblog.article.mapper.ArticleMapper;
 import com.pureblog.auth.mapper.UserMapper;
 import com.pureblog.common.enums.ArticleStatus;
-import com.pureblog.stats.entity.ArticleStatsDO;
-import com.pureblog.stats.event.StatsEvent;
-import com.pureblog.stats.mapper.ArticleStatsMapper;
 import com.pureblog.stats.service.StatsService;
 import com.pureblog.stats.vo.ArticleRankVO;
 import com.pureblog.stats.vo.DashboardVO;
@@ -20,7 +17,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -30,42 +29,39 @@ import java.util.stream.Collectors;
 public class StatsServiceImpl implements StatsService {
 
     private final ArticleMapper articleMapper;
-    private final ArticleStatsMapper statsMapper;
     private final UserMapper userMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
-    @Override
-    public void handleStatsEvent(StatsEvent event) {
-        switch (event.getEventType()) {
-            case "PV" -> incrementPv(event.getArticleId(), event.getIp());
-            case "LIKE_ARTICLE" -> updateHotScore(event.getArticleId(), 10);
-            case "COMMENT_ARTICLE" -> updateHotScore(event.getArticleId(), 5);
-            case "COLLECT_ARTICLE" -> updateHotScore(event.getArticleId(), 8);
-            default -> log.warn("Unknown stats event type: {}", event.getEventType());
-        }
-    }
+    private static final String PV_KEY_PREFIX = "pureblog:article:pv:";
+    private static final String UV_KEY_PREFIX = "pureblog:article:uv:";
+    private static final String HOT_ZSET_KEY = "pureblog:article:hot:zset";
+    private static final int LIKE_HOT_WEIGHT = 10;
 
     @Override
     public void incrementPv(Long articleId, String ip) {
-        String pvKey = "pureblog:article:pv:" + articleId;
+        String pvKey = PV_KEY_PREFIX + articleId;
         redisTemplate.opsForValue().increment(pvKey);
         redisTemplate.expire(pvKey, 2, TimeUnit.DAYS);
 
         if (ip != null) {
-            String uvKey = "pureblog:article:uv:" + articleId + ":" + LocalDate.now();
+            String uvKey = UV_KEY_PREFIX + articleId + ":" + LocalDate.now();
             redisTemplate.opsForSet().add(uvKey, ip);
             redisTemplate.expire(uvKey, 2, TimeUnit.DAYS);
         }
 
-        updateHotScore(articleId, 1);
+        addHotScore(articleId, 1);
     }
 
-    private void updateHotScore(Long articleId, int delta) {
-        String hotKey = "pureblog:article:hot:zset";
-        Double currentScore = redisTemplate.opsForZSet().score(hotKey, String.valueOf(articleId));
+    @Override
+    public void recordLikeHotScore(Long articleId) {
+        addHotScore(articleId, LIKE_HOT_WEIGHT);
+    }
+
+    private void addHotScore(Long articleId, int delta) {
+        Double currentScore = redisTemplate.opsForZSet().score(HOT_ZSET_KEY, String.valueOf(articleId));
         double newScore = (currentScore != null ? currentScore : 0) + delta;
-        redisTemplate.opsForZSet().add(hotKey, String.valueOf(articleId), newScore);
-        redisTemplate.expire(hotKey, 7, TimeUnit.DAYS);
+        redisTemplate.opsForZSet().add(HOT_ZSET_KEY, String.valueOf(articleId), newScore);
+        redisTemplate.expire(HOT_ZSET_KEY, 7, TimeUnit.DAYS);
     }
 
     @Override
@@ -105,9 +101,8 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public List<ArticleRankVO> getHotArticles(int days, int limit) {
-        String hotKey = "pureblog:article:hot:zset";
         Set<ZSetOperations.TypedTuple<Object>> topSet = redisTemplate.opsForZSet()
-                .reverseRangeWithScores(hotKey, 0, limit - 1);
+                .reverseRangeWithScores(HOT_ZSET_KEY, 0, limit - 1);
 
         if (topSet == null || topSet.isEmpty()) {
             return new ArrayList<>();
@@ -157,15 +152,14 @@ public class StatsServiceImpl implements StatsService {
         wrapper.eq(ArticleDO::getStatus, ArticleStatus.PUBLISHED.getCode());
         List<ArticleDO> articles = articleMapper.selectList(wrapper);
 
-        String hotKey = "pureblog:article:hot:zset";
-        redisTemplate.delete(hotKey);
+        redisTemplate.delete(HOT_ZSET_KEY);
 
         for (ArticleDO article : articles) {
             int score = article.getViewCount() + article.getLikeCount() * 10 + article.getCommentCount() * 5;
-            redisTemplate.opsForZSet().add(hotKey, String.valueOf(article.getId()), score);
+            redisTemplate.opsForZSet().add(HOT_ZSET_KEY, String.valueOf(article.getId()), score);
         }
 
-        redisTemplate.expire(hotKey, 7, TimeUnit.DAYS);
+        redisTemplate.expire(HOT_ZSET_KEY, 7, TimeUnit.DAYS);
         log.info("Hot articles refreshed: total={}", articles.size());
     }
 }

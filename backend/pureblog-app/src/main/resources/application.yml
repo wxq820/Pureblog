@@ -10,33 +10,12 @@ spring:
     url: jdbc:mysql://mysql:3306/pureblog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root
     password: root123456
-    type: com.alibaba.druid.pool.DruidDataSource
-    druid:
-      initial-size: 5
-      min-idle: 5
-      max-active: 20
 
   data:
     redis:
       host: redis
       port: 6379
       database: 0
-
-  kafka:
-    bootstrap-servers: kafka:9092
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      acks: all
-      retries: 3
-    consumer:
-      group-id: pureblog-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      properties:
-        spring.json.trusted.packages: com.pureblog.*
 
   elasticsearch:
     uris: http://elasticsearch:9200
@@ -64,17 +43,11 @@ jwt:
   expiration: 86400000
   refresh-expiration: 604800000
 
-minio:
-  endpoint: http://minio:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket: pureblog
-
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info
 
 logging:
   level:
