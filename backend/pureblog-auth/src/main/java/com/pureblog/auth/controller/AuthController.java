@@ -7,8 +7,6 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -19,11 +17,6 @@ public class AuthController {
     @PostMapping("/login")
     public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.success(authService.login(request));
-    }
-
-    @PostMapping("/register")
-    public ApiResponse<AuthResponse> register(@Valid @RequestBody RegisterRequest request) {
-        return ApiResponse.success(authService.register(request));
     }
 
     @PostMapping("/logout")
@@ -37,9 +30,4 @@ public class AuthController {
         return ApiResponse.success(authService.refreshToken(request));
     }
 
-    @GetMapping("/captcha")
-    public ApiResponse<Map<String, String>> captcha() {
-        String key = authService.generateCaptcha();
-        return ApiResponse.success(Map.of("key", key));
-    }
 }

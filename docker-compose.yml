@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # MySQL 8.0 - 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: pureblog-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: pureblog
+      TZ: Asia/Shanghai
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/sql/init_tree.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
+    networks:
+      - pureblog-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Redis 7 - 缓存
+  redis:
+    image: redis:7
+    container_name: pureblog-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - pureblog-net
+
+  # Elasticsearch 8.12 - 搜索引擎
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    container_name: pureblog-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - ./deploy/data/elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - pureblog-net
+
+  # JDK17 + Maven - 编译运行环境
+  jdk17:
+    image: maven:3.9-eclipse-temurin-17
+    container_name: pureblog-jdk17
+    restart: unless-stopped
+    working_dir: /workspace
+    command: ["tail", "-f", "/dev/null"]
+    volumes:
+      - ./backend:/workspace
+      - maven_cache:/root/.m2
+      - ./logs:/workspace/logs
+    environment:
+      - JAVA_TOOL_OPTIONS=-Xms512m -Xmx768m
+    ports:
+      - "8080:8080"      # 后端 API
+      - "5005:5005"      # 远程调试
+    networks:
+      - pureblog-net
+    stdin_open: true
+    tty: true
+
+volumes:
+  mysql_data:
+  redis_data:
+  maven_cache:
+
+networks:
+  pureblog-net:
+    driver: bridge

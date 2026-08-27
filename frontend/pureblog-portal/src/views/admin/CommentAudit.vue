@@ -1,7 +1,7 @@
 <template>
   <div>
     <h1 class="page-title">评论审核</h1>
-    <el-table :data="comments" stripe>
+    <el-table :data="comments" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="articleTitle" label="文章" min-width="150" show-overflow-tooltip />
       <el-table-column prop="nickname" label="用户" width="120" />
@@ -16,12 +16,9 @@
         </template>
       </el-table-column>
     </el-table>
-    <el-pagination
-      class="mt-4"
-      v-model:current-page="page"
-      v-model:page-size="size"
-      :total="total"
-      layout="total, prev, pager, next"
+    <el-pagination class="mt-4" background
+      v-model:current-page="page" v-model:page-size="size"
+      :total="total" layout="total, prev, pager, next"
       @current-change="loadData"
     />
   </div>
@@ -38,11 +35,17 @@ const comments = ref<AdminCommentVO[]>([])
 const page = ref(1)
 const size = ref(20)
 const total = ref(0)
+const loading = ref(false)
 
 async function loadData() {
-  const res = await adminApi.getPendingComments(page.value, size.value)
-  comments.value = res.data.records
-  total.value = res.data.total
+  loading.value = true
+  try {
+    const res = await adminApi.getPendingComments(page.value, size.value)
+    comments.value = res.data.records
+    total.value = res.data.total
+  } finally {
+    loading.value = false
+  }
 }
 
 async function audit(id: number, approve: boolean) {
@@ -51,7 +54,11 @@ async function audit(id: number, approve: boolean) {
   loadData()
 }
 
-function formatDate(date: string) { return dayjs(date).format('YYYY-MM-DD HH:mm') }
-
+function formatDate(date: string) { return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-' }
 onMounted(loadData)
 </script>
+
+<style scoped>
+.page-title { font-size: 20px; font-weight: 600; margin-bottom: 20px; color: var(--text-primary); }
+.mt-4 { margin-top: 16px; }
+</style>

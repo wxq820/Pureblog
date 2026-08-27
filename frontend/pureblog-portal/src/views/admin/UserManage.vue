@@ -1,10 +1,10 @@
 <template>
   <div>
     <h1 class="page-title">用户管理</h1>
-    <div class="filter-bar mb-4">
+    <div class="mb-4">
       <el-input v-model="keyword" placeholder="搜索用户名/昵称" style="width:300px" clearable @change="loadData" />
     </div>
-    <el-table :data="users" stripe>
+    <el-table :data="users" stripe v-loading="loading">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="username" label="用户名" width="120" />
       <el-table-column prop="nickname" label="昵称" width="120" />
@@ -17,18 +17,13 @@
       </el-table-column>
       <el-table-column label="操作" width="120">
         <template #default="{ row }">
-          <el-button text type="danger" size="small" @click="disable(row.id)" v-if="row.status === '正常'">
-            禁用
-          </el-button>
+          <el-button text type="danger" size="small" @click="disable(row.id)" v-if="row.status === '正常'">禁用</el-button>
         </template>
       </el-table-column>
     </el-table>
-    <el-pagination
-      class="mt-4"
-      v-model:current-page="page"
-      v-model:page-size="size"
-      :total="total"
-      layout="total, prev, pager, next"
+    <el-pagination class="mt-4" background
+      v-model:current-page="page" v-model:page-size="size"
+      :total="total" layout="total, prev, pager, next"
       @current-change="loadData"
     />
   </div>
@@ -46,11 +41,17 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 const keyword = ref('')
+const loading = ref(false)
 
 async function loadData() {
-  const res = await adminApi.getUserList(page.value, size.value, keyword.value)
-  users.value = res.data.records
-  total.value = res.data.total
+  loading.value = true
+  try {
+    const res = await adminApi.getUserList(page.value, size.value, keyword.value)
+    users.value = res.data.records
+    total.value = res.data.total
+  } finally {
+    loading.value = false
+  }
 }
 
 async function disable(id: number) {
@@ -60,6 +61,11 @@ async function disable(id: number) {
 }
 
 function formatDate(date: string) { return date ? dayjs(date).format('YYYY-MM-DD HH:mm') : '-' }
-
 onMounted(loadData)
 </script>
+
+<style scoped>
+.page-title { font-size: 20px; font-weight: 600; margin-bottom: 20px; color: var(--text-primary); }
+.mb-4 { margin-bottom: 16px; }
+.mt-4 { margin-top: 16px; }
+</style>

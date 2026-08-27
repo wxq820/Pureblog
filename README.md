@@ -56,8 +56,7 @@ Pureblog/
 │   ├── pureblog-stats/               # PV/UV、热榜、仪表盘
 │   └── pureblog-admin/               # 管理后台（用户/文章/评论/分类/标签）
 ├── frontend/
-│   ├── pureblog-portal/              # 门户站点（Vue 3 + TS）
-│   └── pureblog-admin-web/           # 管理后台（Vue 3 + TS + Element Plus）
+│   └── pureblog-portal/              # 门户站点 + 管理后台（Vue 3 + TS + Element Plus）
 ├── docs/                             # 设计文档（与代码同步）
 ├── deploy/                           # Docker Compose 部署文件
 └── scripts/                          # 启动/停止/初始化脚本
@@ -100,11 +99,10 @@ mvn -pl pureblog-app -am spring-boot:run
 
 ```bash
 cd frontend/pureblog-portal
-npm install && npm run dev    # 门户 http://localhost:5173
-
-cd ../pureblog-admin-web
-npm install && npm run dev    # 管理后台 http://localhost:5174
+npm install && npm run dev    # 门户 + 管理后台 http://localhost:3000
 ```
+
+管理后台入口：登录后（`admin / admin123`）点击顶部导航「管理后台」。
 
 ### 4.2.1 新增「目录树」表 (一次性,Tree 模块启用前必做)
 

@@ -169,3 +169,67 @@ export interface SkillTreeSummary {
   coverColor?: string
   root?: SkillTreeNode
 }
+
+// ── Admin types ───────────────────────────────────────────────
+export interface DashboardVO {
+  totalArticles: number
+  totalUsers: number
+  totalComments: number
+  totalViews: number
+  todayViews: number
+  todayArticles: number
+  todayComments: number
+  pendingComments: number
+}
+
+export interface AdminUserVO {
+  id: number
+  username: string
+  email: string
+  nickname: string
+  avatarUrl: string
+  role: string
+  status: string
+  followerCount: number
+  articleCount: number
+  lastLoginAt: string
+  createdAt: string
+}
+
+export interface AdminCommentVO {
+  id: number
+  articleId: number
+  articleTitle: string
+  userId: number
+  username: string
+  nickname: string
+  content: string
+  status: string
+  createdAt: string
+}
+
+export interface TreeNodeVO {
+  id: number
+  treeId: number
+  parentId: number
+  name: string
+  color?: string
+  sortOrder: number
+  depth: number
+  articleCount: number
+  children?: TreeNodeVO[]
+}
+
+export interface TreeVO {
+  id: number
+  code: string
+  name: string
+  description?: string
+  coverColor?: string
+  sortOrder: number
+  status: number
+  createdAt?: string
+  updatedAt?: string
+  root?: TreeNodeVO
+  nodes?: TreeNodeVO[]
+}

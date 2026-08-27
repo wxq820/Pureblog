@@ -2,7 +2,6 @@
   <div class="skill-tree-container">
     <div class="tree-header">
       <h3>{{ tree.name }}</h3>
-      <div class="tree-hint">拖动下方进度条旋转树（0° ↔ 360°）· 点击节点展开 · 右侧选层级</div>
     </div>
     <div class="tree-body">
       <div class="canvas-wrapper" ref="wrapperRef">
@@ -10,22 +9,22 @@
           ref="canvasRef"
           @click="onClick"
         ></canvas>
-        <div class="rotation-bar">
-          <span class="label">旋转</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.001"
-            :value="rotationProgress"
-            @input="onProgressInput"
-          />
-          <span class="deg">{{ Math.round(rotationDeg) }}°</span>
-        </div>
         <div v-if="selectedDepth3Id" class="selection-banner">
           <span>{{ selectedNodeName }}</span>
           <button class="clear-btn" @click="clearSelection">清除选择</button>
         </div>
+      </div>
+      <div class="rotation-bar">
+        <span class="label">旋转</span>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.001"
+          :value="rotationProgress"
+          @input="onProgressInput"
+        />
+        <span class="deg">{{ Math.round(rotationDeg) }}°</span>
       </div>
       <div class="level-rail">
         <button
@@ -189,14 +188,42 @@ function resolveWorld(canvasWidth: number, canvasHeight: number) {
       })
       continue
     }
-    // depth>=1 呈圆环：depth 越大半径越小、y 越靠上
-    const r = maxR * (1 - (depth - 1) / Math.max(maxDepth, 1))
-    const y = topMargin + verticalUsable * (1 - depth / Math.max(maxDepth, 1))
-    nodes.forEach((ln, i) => {
-      ln.worldAngle = (i / Math.max(nodes.length, 1)) * Math.PI * 2
-      ln.worldR = r
-      ln.worldY = y
-    })
+    if (depth === 1) {
+      const r = maxR * (1 - (depth - 1) / Math.max(maxDepth, 1))
+      const y = topMargin + verticalUsable * (1 - depth / Math.max(maxDepth, 1))
+      // depth=1：从根节点（中心）直接展开，保持全局均匀铺满整圆
+      nodes.forEach((ln, i) => {
+        ln.worldAngle = (i / Math.max(nodes.length, 1)) * Math.PI * 2
+        ln.worldR = r
+        ln.worldY = y
+      })
+    } else {
+      const r = maxR * (1 - (depth - 1) / Math.max(maxDepth, 1))
+      const y = topMargin + verticalUsable * (1 - depth / Math.max(maxDepth, 1))
+      // depth>=2：子节点从父节点方向继承并展开，不全局铺开
+      const parents = byDepth.get(depth - 1) ?? []
+      // 按父节点分组子节点
+      const childrenByParent = new Map<string, LayoutNode[]>()
+      for (const ln of nodes) {
+        const pid = ln.parent?.id ?? ''
+        if (!childrenByParent.has(pid)) childrenByParent.set(pid, [])
+        childrenByParent.get(pid)!.push(ln)
+      }
+      // 每个父节点占父层整圆的一个扇区，子节点在该扇区内均匀分布
+      const parentArc = Math.PI * 2 / Math.max(parents.length, 1)
+      for (const parentLn of parents) {
+        const children = childrenByParent.get(parentLn.node.id) ?? []
+        if (children.length === 0) continue
+        const seg = parentArc / children.length
+        const parentAngle = parentLn.worldAngle
+        children.forEach((ln, i) => {
+          // 从父节点角度开始，在扇区内均匀排开；单子节点则与父同向
+          ln.worldAngle = parentAngle - parentArc / 2 + seg * (i + 0.5)
+          ln.worldR = r
+          ln.worldY = y
+        })
+      }
+    }
   }
 }
 
@@ -316,7 +343,7 @@ function draw() {
       ctx!.textAlign = 'center'
       ctx!.textBaseline = 'middle'
       const fontSize = Math.max(8, r * 0.5)
-      ctx!.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
+      ctx!.font = `bold ${fontSize}px 'Microsoft YaHei', 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`
       ctx!.fillText(p.ln.node.name, p.x, p.y, r * 1.7)
     }
 
@@ -492,9 +519,8 @@ function setMaxDepth(lvl: number) {
 function resize() {
   if (!canvasRef.value || !wrapperRef.value) return
   const rect = wrapperRef.value.getBoundingClientRect()
-  const railWidth = 60
-  canvasRef.value.width = Math.max(320, Math.floor(rect.width - railWidth))
-  canvasRef.value.height = Math.max(500, Math.floor(rect.height))
+  canvasRef.value.width = Math.floor(rect.width)
+  canvasRef.value.height = Math.floor(rect.height)
   resolveWorld(canvasRef.value.width, canvasRef.value.height)
   draw()
 }
@@ -530,13 +556,13 @@ watch(() => props.tree, () => {
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   overflow: hidden;
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
 .tree-header {
-  padding: 12px 16px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
@@ -544,13 +570,13 @@ watch(() => props.tree, () => {
   flex-shrink: 0;
 }
 .tree-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.tree-hint { font-size: 11px; color: var(--text-secondary); }
 
 .tree-body {
   flex: 1 1 auto;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   min-height: 0;
+  position: relative;
 }
 
 .canvas-wrapper {
@@ -567,16 +593,12 @@ watch(() => props.tree, () => {
 canvas {
   cursor: default;
   border-radius: 0;
-  width: 100%;
-  height: 100%;
   display: block;
 }
 
 .rotation-bar {
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: 12px;
+  flex-shrink: 0;
+  margin: 0 16px 8px;
   height: 28px;
   display: flex;
   align-items: center;
@@ -586,7 +608,7 @@ canvas {
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-  z-index: 5;
+  z-index: 999;
   user-select: none;
 }
 .rotation-bar .label {
@@ -660,6 +682,8 @@ canvas {
 .clear-btn:hover { background: #f3f4f6; }
 
 .level-rail {
+  position: absolute;
+  right: 0; top: 0; bottom: 0;
   width: 56px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);

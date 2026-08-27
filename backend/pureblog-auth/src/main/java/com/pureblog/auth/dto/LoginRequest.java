@@ -13,9 +13,7 @@ public class LoginRequest {
     @NotBlank(message = "密码不能为空")
     private String password;
 
-    @Pattern(regexp = "^[a-zA-Z0-9]{4}$", message = "验证码格式错误")
     private String captchaCode;
 
-    @NotBlank(message = "验证码ID不能为空")
     private String captchaKey;
 }

@@ -190,11 +190,11 @@ watch(() => router.currentRoute.value.query.nodeId, (nodeId) => {
 .category-list { display: flex; flex-direction: column; gap: 8px; }
 .category-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
 
-.content-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 24px; min-height: 600px; }
-.left-sidebar { display: grid; grid-template-rows: 2fr 1fr; gap: 16px; min-width: 0; }
-.tree-pane { height: calc(100vh - 240px); min-height: 600px; min-width: 0; display: flex; flex-direction: column; }
+.content-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 24px; flex: 1; min-height: 0; }
+.left-sidebar { display: grid; grid-template-rows: 2fr 1fr; gap: 16px; min-width: 0; min-height: 0; overflow: hidden; }
+.tree-pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .left-sidebar .card { min-height: 0; overflow: auto; }
-.tree-pane .skill-tree-section { width: 100%; flex: 1; display: block; }
+.tree-pane .skill-tree-section { width: 100%; flex: 1; min-height: 0; }
 
 .tree-tabs { display: flex; gap: 8px; padding: 0 16px; background: white; border-bottom: 1px solid var(--border); }
 .tree-tab-btn { background: transparent; border: none; padding: 12px 14px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 3px solid transparent; color: var(--text-secondary); transition: all 0.15s; }
