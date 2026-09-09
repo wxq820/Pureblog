@@ -123,8 +123,7 @@ public class AuthServiceImpl implements AuthService {
         user.setFollowerCount(0);
         user.setFollowingCount(0);
         user.setArticleCount(0);
-        user.setCreatedAt(java.time.LocalDateTime.now());
-        user.setUpdatedAt(java.time.LocalDateTime.now());
+        // createdAt / updatedAt 由 MybatisPlusConfig 自动填充
 
         userMapper.insert(user);
 

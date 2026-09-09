@@ -22,6 +22,7 @@
         <module>pureblog-notification</module>
         <module>pureblog-stats</module>
         <module>pureblog-tree</module>
+        <module>pureblog-upload</module>
         <module>pureblog-admin</module>
         <module>pureblog-app</module>
     </modules>
@@ -126,6 +127,11 @@
             <dependency>
                 <groupId>com.pureblog</groupId>
                 <artifactId>pureblog-tree</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pureblog</groupId>
+                <artifactId>pureblog-upload</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

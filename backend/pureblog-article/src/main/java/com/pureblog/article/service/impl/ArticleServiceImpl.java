@@ -245,22 +245,32 @@ public class ArticleServiceImpl implements ArticleService {
         wrapper.eq(query.getAuthorId() != null, ArticleDO::getAuthorId, query.getAuthorId());
         wrapper.eq(query.getStatus() != null, ArticleDO::getStatus, query.getStatus());
         wrapper.eq(ArticleDO::getStatus, ArticleStatus.PUBLISHED.getCode());
+        wrapper.eq(query.getTreeNodeId() != null, ArticleDO::getTreeNodeId, query.getTreeNodeId());
+        wrapper.eq(query.getTreeId() != null && query.getTreeNodeId() == null, ArticleDO::getTreeId, query.getTreeId());
         if (StringUtils.isNotBlank(query.getKeyword())) {
             wrapper.like(ArticleDO::getTitle, query.getKeyword());
         }
 
-        String sortField = switch (query.getSortBy()) {
-            case "viewCount" -> "view_count";
-            case "likeCount" -> "like_count";
-            case "commentCount" -> "comment_count";
-            default -> "published_at";
-        };
-        wrapper.orderByDesc(ArticleDO::getIsTop)
-                .orderByDesc(ArticleDO::getViewCount);
-        if (query.getSortOrder() != null && query.getSortOrder().equalsIgnoreCase("asc")) {
-            wrapper.orderByAsc(ArticleDO::getPublishedAt);
-        } else {
-            wrapper.orderByDesc(ArticleDO::getPublishedAt);
+        // 排序：置顶优先 → 按 sortBy 指定的字段 → asc/desc
+        wrapper.orderByDesc(ArticleDO::getIsTop);
+        boolean asc = query.getSortOrder() != null && query.getSortOrder().equalsIgnoreCase("asc");
+        switch (query.getSortBy() == null ? "" : query.getSortBy()) {
+            case "viewCount" -> {
+                if (asc) wrapper.orderByAsc(ArticleDO::getViewCount);
+                else wrapper.orderByDesc(ArticleDO::getViewCount);
+            }
+            case "likeCount" -> {
+                if (asc) wrapper.orderByAsc(ArticleDO::getLikeCount);
+                else wrapper.orderByDesc(ArticleDO::getLikeCount);
+            }
+            case "commentCount" -> {
+                if (asc) wrapper.orderByAsc(ArticleDO::getCommentCount);
+                else wrapper.orderByDesc(ArticleDO::getCommentCount);
+            }
+            default -> {
+                if (asc) wrapper.orderByAsc(ArticleDO::getPublishedAt);
+                else wrapper.orderByDesc(ArticleDO::getPublishedAt);
+            }
         }
 
         Page<ArticleDO> page = new Page<>((long) query.getPage(), (long) query.getSize());
@@ -334,6 +344,44 @@ public class ArticleServiceImpl implements ArticleService {
     }
 
     @Override
+    public void createCategory(CategoryDO category) {
+        if (StringUtils.isBlank(category.getName())) throw new BusinessException(ErrorCode.PARAM_INVALID);
+        categoryMapper.insert(category);
+        log.info("Category created: id={}, name={}", category.getId(), category.getName());
+    }
+
+    @Override
+    public void updateCategory(CategoryDO category) {
+        categoryMapper.updateById(category);
+        log.info("Category updated: id={}", category.getId());
+    }
+
+    @Override
+    public void deleteCategory(Long id) {
+        categoryMapper.deleteById(id);
+        log.info("Category deleted: id={}", id);
+    }
+
+    @Override
+    public void createTag(TagDO tag) {
+        if (StringUtils.isBlank(tag.getName())) throw new BusinessException(ErrorCode.PARAM_INVALID);
+        tagMapper.insert(tag);
+        log.info("Tag created: id={}, name={}", tag.getId(), tag.getName());
+    }
+
+    @Override
+    public void updateTag(TagDO tag) {
+        tagMapper.updateById(tag);
+        log.info("Tag updated: id={}", tag.getId());
+    }
+
+    @Override
+    public void deleteTag(Long id) {
+        tagMapper.deleteById(id);
+        log.info("Tag deleted: id={}", id);
+    }
+
+    @Override
     public void incrementViewCount(Long articleId) {
         cacheManager.incrementPv(articleId);
     }
@@ -370,8 +418,7 @@ public class ArticleServiceImpl implements ArticleService {
         ac.setContent(content);
         ac.setHtmlContent(htmlContent);
         ac.setWordCount(content != null ? content.length() : 0);
-        ac.setCreatedAt(java.time.LocalDateTime.now());
-        ac.setUpdatedAt(java.time.LocalDateTime.now());
+        // createdAt / updatedAt 由 MybatisPlusConfig 自动填充
         contentMapper.insert(ac);
     }
 
@@ -382,6 +429,8 @@ public class ArticleServiceImpl implements ArticleService {
                 .set(ArticleContentDO::getHtmlContent, htmlContent)
                 .set(ArticleContentDO::getWordCount, content != null ? content.length() : 0)
                 .set(ArticleContentDO::getUpdatedAt, java.time.LocalDateTime.now());
+        // LambdaUpdateWrapper.update(null, wrapper) 的 entity 为 null,
+        // MetaObjectHandler.updateFill 不会跑,这里保留显式赋值最稳.
         contentMapper.update(null, wrapper);
     }
 
@@ -391,7 +440,7 @@ public class ArticleServiceImpl implements ArticleService {
             ArticleTagDO at = new ArticleTagDO();
             at.setArticleId(articleId);
             at.setTagId(tagId);
-            at.setCreatedAt(java.time.LocalDateTime.now());
+            // createdAt 由自动填充写入
             articleTagMapper.insert(at);
             tagMapper.update(null, new LambdaUpdateWrapper<TagDO>()
                     .eq(TagDO::getId, tagId).setSql("article_count = article_count + 1"));

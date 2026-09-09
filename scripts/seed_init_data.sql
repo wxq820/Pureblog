@@ -1,7 +1,7 @@
 USE pureblog;
 
 INSERT INTO pb_user (username, email, password_hash, nickname, role, status) VALUES
-('admin', 'admin@pureblog.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '管理员', 4, 1);
+('admin', 'admin@pureblog.com', '{bcrypt}$2b$10$n2RjfdG2uceykRrldR7mROLiWWbKAspeYmXSXXomSXxzP53BdCy9a', '管理员', 4, 1);
 
 INSERT INTO pb_category (name, slug, description, sort_order) VALUES
 ('技术', 'tech', '技术相关文章', 1),

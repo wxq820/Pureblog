@@ -5,6 +5,8 @@ export interface SkillNode {
   children?: SkillNode[]
   color?: string
   link?: string
+  /** 节点所属目录树主表 ID（来自后台 pb_tree_node.tree_id，用于按树过滤文章） */
+  treeId?: number | string
 }
 
 export interface SkillTree {

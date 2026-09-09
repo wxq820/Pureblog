@@ -9,17 +9,17 @@
       <el-button type="primary" size="small" @click="showNodeDialog()">新增节点</el-button>
     </div>
 
-    <el-table :data="nodes" stripe v-loading="loading" row-key="id" default-expand-all>
-      <el-table-column prop="name" label="名称" min-width="200" />
-      <el-table-column prop="color" label="颜色" width="100">
+    <el-table :data="nodes" stripe v-loading="loading" row-key="id" default-expand-all style="width: 100%">
+      <el-table-column prop="name" label="名称" min-width="200" align="center" />
+      <el-table-column prop="color" label="颜色" width="100" align="center">
         <template #default="{ row }">
           <span v-if="row.color" :style="{ color: row.color, fontWeight: 600 }">■</span>
         </template>
       </el-table-column>
-      <el-table-column prop="depth" label="层级" width="80" />
-      <el-table-column prop="sortOrder" label="排序" width="80" />
-      <el-table-column prop="articleCount" label="文章数" width="100" />
-      <el-table-column label="操作" width="200">
+      <el-table-column prop="depth" label="层级" width="80" align="center" />
+      <el-table-column prop="sortOrder" label="排序" width="80" align="center" />
+      <el-table-column prop="articleCount" label="文章数" width="100" align="center" />
+      <el-table-column label="操作" width="200" align="center">
         <template #default="{ row }">
           <el-button text type="primary" size="small" @click="showNodeDialog(row)">编辑</el-button>
           <el-button text type="primary" size="small" @click="showNodeDialog({ parentId: row.id })">添加子节点</el-button>
@@ -88,14 +88,21 @@ async function saveNode() {
     ElMessage.success('保存成功')
     nodeDialogVisible.value = false
     loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '保存失败')
   } finally { saving.value = false }
 }
 
 async function removeNode(id: number) {
-  await ElMessageBox.confirm('确认删除?', '提示')
-  await treeAdminApi.deleteNode(id)
-  ElMessage.success('已删除')
-  loadData()
+  try {
+    await ElMessageBox.confirm('确认删除?', '提示')
+    await treeAdminApi.deleteNode(id)
+    ElMessage.success('已删除')
+    loadData()
+  } catch (err: any) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '删除失败')
+  }
 }
 
 onMounted(loadData)

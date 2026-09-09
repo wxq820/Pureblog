@@ -3,11 +3,11 @@ services:
     image: mysql:8.0
     container_name: pureblog-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: pureblog
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "13306:3306"
     volumes:
       - ./data/mysql:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password

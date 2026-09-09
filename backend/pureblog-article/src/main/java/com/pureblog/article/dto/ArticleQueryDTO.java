@@ -7,6 +7,8 @@ public class ArticleQueryDTO {
     private Long categoryId;
     private Long tagId;
     private Long authorId;
+    private Long treeId;
+    private Long treeNodeId;
     private Integer status;
     private String keyword;
     private String sortBy = "publishedAt";

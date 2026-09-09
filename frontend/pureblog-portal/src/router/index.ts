@@ -14,13 +14,20 @@ const router = createRouter({
         { path: 'search', name: 'search', component: () => import('@/views/search/SearchPage.vue') },
         { path: 'user/:id', name: 'user-profile', component: () => import('@/views/user/UserProfile.vue') },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/notification/NotificationList.vue'), meta: { requiresAuth: true } },
-        // 管理路由（登录后才可见）
-        { path: 'admin', name: 'admin-dashboard', component: () => import('@/views/admin/Dashboard.vue'), meta: { requiresAuth: true } },
-        { path: 'admin/article/list', name: 'article-list', component: () => import('@/views/admin/ArticleManage.vue'), meta: { requiresAuth: true } },
-        { path: 'admin/category/manage', name: 'category-manage', component: () => import('@/views/admin/CategoryManage.vue'), meta: { requiresAuth: true } },
-        { path: 'admin/tag/manage', name: 'tag-manage', component: () => import('@/views/admin/TagManage.vue'), meta: { requiresAuth: true } },
-        { path: 'admin/tree/manage', name: 'tree-manage', component: () => import('@/views/admin/TreeManage.vue'), meta: { requiresAuth: true } },
-        { path: 'admin/tree/node/:treeId', name: 'tree-node-manage', component: () => import('@/views/admin/TreeNodeManage.vue'), meta: { requiresAuth: true } }
+      ]
+    },
+    // 管理后台：独立布局，铺满右侧
+    {
+      path: '/admin',
+      component: () => import('@/views/admin/AdminLayout.vue'),
+      meta: { requiresAuth: true },
+      children: [
+        { path: '', name: 'admin-dashboard', component: () => import('@/views/admin/Dashboard.vue') },
+        { path: 'article/list', name: 'article-list', component: () => import('@/views/admin/ArticleManage.vue') },
+        { path: 'category/manage', name: 'category-manage', component: () => import('@/views/admin/CategoryManage.vue') },
+        { path: 'tag/manage', name: 'tag-manage', component: () => import('@/views/admin/TagManage.vue') },
+        { path: 'tree/manage', name: 'tree-manage', component: () => import('@/views/admin/TreeManage.vue') },
+        { path: 'tree/node/:treeId', name: 'tree-node-manage', component: () => import('@/views/admin/TreeNodeManage.vue') }
       ]
     },
     { path: '/login', name: 'login', component: () => import('@/views/user/Login.vue') }

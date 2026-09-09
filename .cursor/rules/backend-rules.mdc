@@ -1,28 +1,37 @@
-# Backend Implementation Rules
+# 后端实现规则
 
-## Security
-- JWT based authentication
-- RBAC for admin endpoints
-- Current user from SecurityContext
-- No insecure direct object access
+## 安全
+- JWT 鉴权：accessToken（24h）+ refreshToken（7d），jjwt 0.12.6
+- 鉴权过滤器：`JwtAuthenticationFilter`（在 `pureblog-auth`，注册在 Spring Security 链中）
+- **当前登录用户通过 `LoginUserHolder.get()` ThreadLocal 获取，不是 Spring SecurityContext**
+- 后台接口鉴权：业务代码内手动 `LoginUserHolder.get().isAdmin()` 校验；**不引入 RBAC**
+- 白名单见 `JwtAuthenticationFilter.shouldNotFilter`，新增公开路径必须同步更新
+- 不允许不安全的直接对象访问
 
-## Cache
-- Read path: cache first, DB fallback
-- Update article => clear article detail cache
-- List cache can use short TTL
-- Do not use Redis as source of truth
+## 缓存
+- 读路径：先读缓存，未命中再回源数据库
+- 更新文章 => 清理文章详情缓存
+- 列表缓存可以使用较短的 TTL
+- 不要将 Redis 作为唯一数据源（source of truth）
 
-## Messaging
-- Kafka only for async side effects
-- Consumer must consider idempotency
-- Message failures cannot break main business transaction
+## 消息 / 异步
+- **当前阶段不引入 Kafka / RocketMQ / Redis Stream**
+- 异步副作用统一用 Spring `ApplicationEventPublisher` + `@EventListener`（可标 `@Async`）
+- 监听器内必须 try-catch，避免异常影响主事务
+- 事件定义在 `pureblog-common` 的 `event/` 包
+- 后续如需跨进程消息，需新增文档章节并同步 `docs/01`、`docs/02`
 
-## Search
-- Only published articles should be indexed
-- Offline/deleted articles must be removed from search visibility
-- Provide rebuild-index capability
+## 搜索
+- 仅已发布的文章应被索引（`status=PUBLISHED`）
+- 离线/已删除的文章必须从搜索结果中移除（监听 `ArticleEvent` 的 `OFFLINE` / `DELETED`）
+- 提供重建索引的能力（`/api/search/index/rebuild`）
 
-## Database
-- article metadata and content must be stored in separate tables
-- keep audit fields on every table
-- no direct DO exposure to frontend
+## 数据库
+- 文章元数据与内容必须分表存储（`pb_article` + `pb_article_content`）
+- 每个表都保留审计字段（`created_at`、`updated_at`、`deleted`）
+- 不允许将 DO 直接暴露给前端
+- 树模块表（`pb_tree`、`pb_tree_node`）见 `backend/sql/init_tree.sql`
+
+## 模块依赖
+- `pureblog-article` 反向依赖 `pureblog-tree`（通过 `TreeService` 调用 `assertIsLeaf` / `incrementArticleCount`）
+- 其他依赖关系见 `docs/03_项目目录建议.md` 第 2 节

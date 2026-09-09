@@ -486,11 +486,12 @@ function onClick(e: MouseEvent) {
     draw()
     return
   }
-  // 第 3 层节点：选中并进入该子树展开模式
-  if (hit.ln.depth === 2) {
+  // 第 3 层及更深（depth>=2）节点：把 treeId + nodeId 写到 URL，触发文章列表过滤
+  if (hit.ln.depth >= 2) {
     selectedDepth3Id.value = hit.ln.node.id
     selectedExpandedDepth = 3
     draw()
+    router.push({ query: { nodeId: hit.ln.node.id, treeId: hit.ln.node.treeId } })
     return
   }
   // 选中状态下点同一节点：清除选择
@@ -498,7 +499,7 @@ function onClick(e: MouseEvent) {
     clearSelection()
     return
   }
-  // 节点本体：跳转
+  // 节点本体：跳转（如果有显式 link，比如首屏占位）
   if (hit.ln.node.link) {
     router.push(hit.ln.node.link)
   }

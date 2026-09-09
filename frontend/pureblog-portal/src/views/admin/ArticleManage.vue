@@ -5,16 +5,16 @@
       <el-input v-model="keyword" placeholder="搜索文章标题" style="width:300px" clearable @change="loadData" />
     </div>
     <el-table :data="articles" stripe v-loading="loading">
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip />
-      <el-table-column prop="authorName" label="作者" width="120" />
-      <el-table-column prop="viewCount" label="浏览" width="80" />
-      <el-table-column prop="likeCount" label="点赞" width="80" />
-      <el-table-column prop="commentCount" label="评论" width="80" />
-      <el-table-column prop="publishedAt" label="发布时间" width="160">
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="title" label="标题" min-width="200" show-overflow-tooltip align="center" />
+      <el-table-column prop="authorName" label="作者" width="120" align="center" />
+      <el-table-column prop="viewCount" label="浏览" width="80" align="center" />
+      <el-table-column prop="likeCount" label="点赞" width="80" align="center" />
+      <el-table-column prop="commentCount" label="评论" width="80" align="center" />
+      <el-table-column prop="publishedAt" label="发布时间" width="160" align="center">
         <template #default="{ row }">{{ formatDate(row.publishedAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column label="操作" width="280" align="center">
         <template #default="{ row }">
           <el-button text type="primary" size="small" @click="edit(row.id)">编辑</el-button>
           <el-button text type="warning" size="small" @click="offline(row.id)">下架</el-button>

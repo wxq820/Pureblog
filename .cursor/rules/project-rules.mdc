@@ -1,31 +1,38 @@
-# PureBlog Project Rules
+# PureBlog 项目规则
 
-## Scope
-This repository is a modular-monolith blog project used to showcase backend engineering capability.
+## 范围
+本仓库是一个模块化单体（modular-monolith）博客项目，**默认定位为个人技术博客**（单人账号、保留多人协作代码能力但默认不开放注册）。用于展示后端工程能力。
 
-## Mandatory constraints
-- Follow docs under `/docs`
-- Keep database table prefix as `pb_`
-- Do not split into microservices in phase 1
-- Use Java 17 + Spring Boot 3 + MyBatis-Plus
-- Use Redis for cache/counters, Kafka for async side effects, Elasticsearch for search
-- Do not introduce Dubbo in phase 1 unless explicitly requested
-- Output complete files, not partial snippets
-- Keep controller thin, business logic in service/manager
-- Keep DTO/VO/DO separated
-- Update SQL/doc if schema changes
+## 强制性约束
+- 遵循 `/docs` 下的文档，文档与代码不一致时**改文档**
+- 数据库表前缀固定为 `pb_`
+- 第一阶段不拆分微服务
+- 使用 Java 17 + Spring Boot 3 + MyBatis-Plus
+- 使用 Redis 做缓存/计数器；**异步副作用使用 Spring `ApplicationEventPublisher`，不使用 Kafka**；使用 Elasticsearch 做搜索
+- 第一阶段不引入 Dubbo，除非明确要求
+- 输出完整的文件，不要只输出片段
+- 保持 Controller 层精简，业务逻辑放在 service/manager
+- 保持 DTO/VO/DO 分离
+- 若数据库结构发生变更，需同步更新 `docs/04_数据库设计.sql` 与 `backend/sql/`
+- **基础设施（MySQL / Redis / Elasticsearch 等）必须通过 `deploy/docker-compose.dev.yml` 启动，禁止本地安装同版本服务**
+  - 启动命令：`cd deploy && docker compose -f docker-compose.dev.yml up -d`
+  - 数据持久化位置：`deploy/data/mysql/`、`deploy/data/redis/`
+  - 应用配置 `application-dev.yml` 已与该 compose 对齐（MySQL 13306→3306、Redis 6379、ES 9200，MySQL 密码 123456）
 
-## Code style
-- Use clear package boundaries
-- Use Validation for request params
-- Use unified ApiResponse
-- Use unified GlobalExceptionHandler
-- Use transaction only on write operations
-- Use XML for complex queries when MyBatis-Plus is not enough
+## 代码风格
+- 使用清晰的包边界
+- 使用 Validation 校验请求参数
+- 使用统一的 `ApiResponse<T>` / `PageResult<T>`
+- 使用统一的 `GlobalExceptionHandler`
+- 仅在写操作上使用事务
+- 当 MyBatis-Plus 不够用时，使用 XML 编写复杂查询
 
-## Review expectations
-When generating code, always state:
-1. which files changed
-2. whether DB changed
-3. how to test
-4. what to do next
+## 评审预期
+生成代码时，必须说明：
+1. 修改了哪些文件
+2. 数据库是否有变更
+3. 如何测试
+4. 下一步要做什么
+
+## 文档维护
+- 任何代码/SQL/接口/中间件变更都必须同步 `docs/`，详见 [.cursor/rules/docs-sync.mdc](docs-sync.mdc)

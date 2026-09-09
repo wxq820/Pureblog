@@ -4,17 +4,17 @@
     <div class="mb-4">
       <el-button type="primary" size="small" @click="showTreeDialog()">新增目录树</el-button>
     </div>
-    <el-table :data="trees" stripe v-loading="loading">
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="名称" width="200" />
-      <el-table-column prop="code" label="Code" width="160" />
-      <el-table-column prop="description" label="描述" min-width="200" />
-      <el-table-column label="状态" width="100">
+    <el-table :data="trees" stripe v-loading="loading" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="name" label="名称" width="200" align="center" />
+      <el-table-column prop="code" label="Code" width="160" align="center" />
+      <el-table-column prop="description" label="描述" min-width="200" align="center" />
+      <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag :type="row.status === 1 ? 'success' : 'info'" size="small">{{ row.status === 1 ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column label="操作" width="280" align="center">
         <template #default="{ row }">
           <el-button text type="primary" size="small" @click="toggleStatus(row)">{{ row.status === 1 ? '禁用' : '启用' }}</el-button>
           <el-button text type="primary" size="small" @click="showTreeDialog(row)">编辑</el-button>
@@ -81,19 +81,30 @@ async function saveTree() {
     ElMessage.success('保存成功')
     treeDialogVisible.value = false
     loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '保存失败')
   } finally { saving.value = false }
 }
 
 async function toggleStatus(row: TreeVO) {
-  await treeAdminApi.updateTreeStatus(row.id, row.status === 1 ? 0 : 1)
-  loadData()
+  try {
+    await treeAdminApi.updateTreeStatus(row.id, row.status === 1 ? 0 : 1)
+    loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '状态切换失败')
+  }
 }
 
 async function removeTree(id: number) {
-  await ElMessageBox.confirm('确认删除?', '提示')
-  await treeAdminApi.deleteTree(id)
-  ElMessage.success('已删除')
-  loadData()
+  try {
+    await ElMessageBox.confirm('确认删除?', '提示')
+    await treeAdminApi.deleteTree(id)
+    ElMessage.success('已删除')
+    loadData()
+  } catch (err: any) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '删除失败')
+  }
 }
 
 function goNodes(treeId: number) {

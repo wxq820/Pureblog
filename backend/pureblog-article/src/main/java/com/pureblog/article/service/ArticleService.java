@@ -1,6 +1,8 @@
 package com.pureblog.article.service;
 
 import com.pureblog.article.dto.*;
+import com.pureblog.article.entity.CategoryDO;
+import com.pureblog.article.entity.TagDO;
 import com.pureblog.article.vo.*;
 import com.pureblog.common.result.PageResult;
 import java.util.List;
@@ -28,10 +30,22 @@ public interface ArticleService {
     List<ArticleListVO> getAuthorArticles(Long authorId, int page, int size);
     
     List<CategoryVO> getAllCategories();
-    
+
     List<TagVO> getAllTags();
-    
+
+    void createCategory(CategoryDO category);
+
+    void updateCategory(CategoryDO category);
+
+    void deleteCategory(Long id);
+
+    void createTag(TagDO tag);
+
+    void updateTag(TagDO tag);
+
+    void deleteTag(Long id);
+
     void incrementViewCount(Long articleId);
-    
+
     void rebuildSearchIndex(Long articleId);
 }

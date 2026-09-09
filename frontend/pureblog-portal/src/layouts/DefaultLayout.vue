@@ -17,5 +17,5 @@ import AppFooter from '@/components/AppFooter.vue'
 
 <style scoped>
 .layout { min-height: 100vh; display: flex; flex-direction: column; }
-.main-content { flex: 1; padding: 24px 0; }
+.main-content { flex: 1; padding: 24px 0; padding-top: 72px; }
 </style>

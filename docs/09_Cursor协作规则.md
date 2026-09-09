@@ -5,10 +5,11 @@
 ## 1. 总原则
 
 - 严格以本仓库实际代码为准修改，**不要参考老的、未实现的接口或表结构**
-- 鉴权走自定义 `AuthInterceptor`（不要加 Spring Security 过滤器链）
-- 异步事件用 `ApplicationEventPublisher`（不要引入 Kafka）
-- 一个任务只做一件事，不要"顺手"改其他模块
+- 鉴权走 `JwtAuthenticationFilter`（注册在 Spring Security 链中），当前用户通过 `LoginUserHolder.get()` ThreadLocal 获取
+- 异步事件用 `ApplicationEventPublisher` + `@EventListener`（**不要引入 Kafka / RocketMQ / Redis Stream**）
+- 一个任务只做一件事，不要「顺手」改其他模块
 - 改动前先说明影响范围
+- **任何代码 / SQL / 接口 / 中间件变更必须同步 `docs/`**（详见 `.cursor/rules/docs-sync.mdc`）
 
 ---
 
@@ -30,11 +31,12 @@
 | `pureblog-common` | 不依赖其他子模块 |
 | `pureblog-auth` | `pureblog-common` |
 | `pureblog-user` | `pureblog-common`、`pureblog-auth`（共享 UserDO） |
-| `pureblog-article` | `pureblog-common`、`pureblog-auth` |
+| `pureblog-article` | `pureblog-common`、`pureblog-auth`、`pureblog-tree`（反向依赖以校验叶子） |
 | `pureblog-comment` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
 | `pureblog-search` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
 | `pureblog-notification` | `pureblog-common`、`pureblog-auth` |
 | `pureblog-stats` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
+| `pureblog-tree` | `pureblog-common` |
 | `pureblog-admin` | `pureblog-common`、`pureblog-article`、`pureblog-comment`、`pureblog-stats` |
 | `pureblog-app` | 全部子模块 |
 
@@ -51,6 +53,7 @@
 - 状态字段统一 `TINYINT`，对应枚举 `getCode()`
 - 新增表/字段必须同步更新 `docs/04_数据库设计.sql`
 - 复杂查询优先索引优化，不在业务代码里绕 SQL
+- 目录树表 `pb_tree` / `pb_tree_node` 与文章挂载字段 `pb_article.tree_id` / `pb_article.tree_node_id` 由 `backend/sql/init_tree.sql`（幂等 ALTER）维护
 
 ---
 
@@ -65,17 +68,19 @@
 7. 异常用 `BusinessException(ErrorCode.X, msg)`
 8. 写接口必须考虑事务边界（`@Transactional`）
 9. 禁止直接返回 `DO` 给前端
-10. 鉴权信息通过 `LoginUserHolder.get()` 获取
+10. 鉴权信息通过 `LoginUserHolder.get()` 获取；后台接口校验 `LoginUserHolder.get().isAdmin()`
+11. 文章保存时强制 `treeService.assertIsLeaf(treeNodeId)`
 
 ---
 
 ## 6. 安全规则
 
 1. 登录用 JWT（accessToken + refreshToken）
-2. 后台接口必须校验 `LoginUserHolder.get().isAdmin()`
+2. 后台接口必须校验 `LoginUserHolder.get().isAdmin()`（**当前不引入 RBAC**）
 3. 写接口必须校验当前用户身份
 4. **不要在 Service 内吞掉所有异常**：监听器内可吞，业务返回前必须暴露
-5. Token 必须经过 `AuthInterceptor` 校验才能被解析
+5. Token 必须经过 `JwtAuthenticationFilter` 校验才能被解析
+6. 上传接口：仅登录用户、白名单后缀、大小限制
 
 ---
 
@@ -101,7 +106,7 @@
 3. 监听方法：`onXxx(XxxEvent)`，标 `@EventListener`
 4. 监听器中的异常应被捕获并打日志，不应向上抛
 5. **不要在主事务内做远程调用**（当前也没有远程调用）
-6. 后续如果引入 Kafka，补 Outbox 表（`pb_kafka_outbox` 已建）
+6. 当前未启用 `pb_kafka_outbox`，未来引入 Kafka 时再补
 
 ---
 
@@ -133,7 +138,7 @@
 ### 11.1 改动说明
 - 本次实现了什么
 - 涉及哪些文件
-- 数据库 / 接口是否有变更
+- 数据库 / 接口是否有变更（**有变更必须列出对应 `docs/` 同步项**）
 
 ### 11.2 代码输出
 - 完整文件内容
@@ -153,14 +158,15 @@
 
 Cursor 不允许：
 
-- 引入 Kafka / RocketMQ 等消息中间件（除非明确告知阶段二）
-- 引入 MinIO / OSS（除非明确告知阶段二）
+- 引入 Kafka / RocketMQ / Redis Stream（除非明确告知阶段二 + 同步更新 `docs/01`、`docs/02`）
+- 引入 MinIO / OSS（除非明确告知阶段二 + 同步更新 `docs/01`、`docs/08`）
 - 引入 Spring Cloud、Dubbo、nacos
 - 把所有逻辑写到一个 `ServiceImpl`
 - 不说明原因就改表结构
 - 引用已删除的配置（`KafkaConfig`、`MinioConfig`、`AsyncConfig`、`WebConfig`、`CommonCacheConfig`）
-- 改 Spring Security 的过滤器链（鉴权走 `AuthInterceptor`）
+- 改 Spring Security 的鉴权逻辑（鉴权走 `JwtAuthenticationFilter`）
 - 一次性生成过多无法审阅的代码
+- 修改后不同步 `docs/`（详见 `.cursor/rules/docs-sync.mdc`）
 
 ---
 
@@ -168,4 +174,4 @@ Cursor 不允许：
 
 你每次都可以先贴这一段给 Cursor：
 
-> 请严格按照本仓库 `docs/06_API接口清单.md` 和 `docs/04_数据库设计.sql` 的实际接口/表结构来开发，不要参考任何已删除的中间件配置。一次只实现一个完整小闭环，输出完整文件路径、代码内容、数据库变更、验证步骤和下一步建议。
+> 请严格按照本仓库 `docs/06_API接口清单.md` 和 `docs/04_数据库设计.sql` 的实际接口/表结构来开发，不要参考任何已删除的中间件配置。一次只实现一个完整小闭环，输出完整文件路径、代码内容、数据库变更、验证步骤和下一步建议。任何代码或接口变更必须同步 `docs/`。

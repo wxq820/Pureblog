@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { articleApi } from '@/api/article'
 import { treeApi } from '@/api/tree'
 import ArticleCard from '@/components/ArticleCard.vue'
@@ -72,6 +72,7 @@ import SkillTree from '@/components/SkillTree.vue'
 import type { ArticleListVO, SkillTreeSummary, SkillTreeNode } from '@/types'
 
 const router = useRouter()
+const route = useRoute()
 const searchKeyword = ref('')
 const articleTab = ref<'hot' | 'latest'>('hot')
 const articles = ref<ArticleListVO[]>([])
@@ -80,6 +81,8 @@ const categories = ref<any[]>([])
 const loading = ref(false)
 const page = ref(1)
 const hasMore = ref(true)
+const currentTreeNodeId = ref<number | null>(null)
+const currentTreeId = ref<number | null>(null)
 
 const trees = ref<SkillTreeSummary[]>([])
 const activeCode = ref<string>('')
@@ -94,7 +97,18 @@ function doSearch() {
 async function loadArticles() {
   loading.value = true
   try {
-    const res = await articleApi.getList({ page: page.value, size: 10, sortBy: 'publishedAt', sortOrder: 'desc' })
+    const params: any = {
+      page: page.value,
+      size: 10,
+      sortBy: 'publishedAt',
+      sortOrder: 'desc'
+    }
+    if (currentTreeNodeId.value != null) {
+      params.treeNodeId = currentTreeNodeId.value
+    } else if (currentTreeId.value != null) {
+      params.treeId = currentTreeId.value
+    }
+    const res = await articleApi.getList(params)
     if (page.value === 1) {
       articles.value = res.data.records
     } else {
@@ -168,10 +182,33 @@ onMounted(() => {
   loadTrees()
 })
 
-watch(() => router.currentRoute.value.query.nodeId, (nodeId) => {
-  if (nodeId && activeTree.value) {
-    // 切到对应叶子节点的文章列表 - 当前仅路由传参占位,完整功能后续按需扩展.
+watch(() => route.query.nodeId, async (nodeId) => {
+  if (!nodeId) {
+    currentTreeNodeId.value = null
+    currentTreeId.value = null
+    if (articleTab.value === 'latest') {
+      page.value = 1
+      articles.value = []
+      hasMore.value = true
+      await loadArticles()
+    }
+    return
   }
+  currentTreeNodeId.value = Number(nodeId) || null
+  currentTreeId.value = route.query.treeId ? Number(route.query.treeId) : null
+  if (articleTab.value !== 'latest') articleTab.value = 'latest'
+  page.value = 1
+  articles.value = []
+  hasMore.value = true
+  await loadArticles()
+})
+
+watch(articleTab, async (tab) => {
+  if (tab !== 'latest') return
+  page.value = 1
+  articles.value = []
+  hasMore.value = true
+  await loadArticles()
 })
 </script>
 

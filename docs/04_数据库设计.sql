@@ -12,6 +12,7 @@
 -- 6. 文章元数据与正文拆表
 -- 7. 搜索依赖 Elasticsearch，不在 MySQL 上做全文索引
 -- 8. 用户密码采用 BCrypt 加密
+-- 9. 目录树相关表与字段（pb_tree / pb_tree_node / pb_article.tree_id / pb_article.tree_node_id）由 `backend/sql/init_tree.sql` 维护（幂等 ALTER）。已上线库只需 source 一次该脚本；新库可把下文第 16~18 节直接合并到本文件
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS pureblog DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -85,12 +86,15 @@ CREATE TABLE pb_tag (
 -- -------------------------------------------------------
 -- 4. pb_article 文章元数据表
 --    status: 0-草稿 1-已发布 2-已下架
+--    tree_id / tree_node_id：目录树挂载字段（首次部署后由 init_tree.sql 追加）
 -- -------------------------------------------------------
 DROP TABLE IF EXISTS pb_article;
 CREATE TABLE pb_article (
     id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT '文章ID',
     author_id     BIGINT UNSIGNED  NOT NULL                              COMMENT '作者ID',
     category_id   BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '分类ID',
+    tree_id       BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '目录树主表ID（init_tree.sql 追加）',
+    tree_node_id  BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '目录树叶子节点ID（init_tree.sql 追加）',
     title         VARCHAR(255)     NOT NULL                              COMMENT '文章标题',
     summary       VARCHAR(500)     DEFAULT NULL                          COMMENT '文章摘要',
     cover_url     VARCHAR(500)     DEFAULT NULL                          COMMENT '封面图URL',
@@ -111,7 +115,9 @@ CREATE TABLE pb_article (
     KEY idx_status (status),
     KEY idx_published_at (published_at),
     KEY idx_is_featured (is_featured),
-    KEY idx_is_top (is_top)
+    KEY idx_is_top (is_top),
+    KEY idx_tree_id (tree_id),
+    KEY idx_tree_node_id (tree_node_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章元数据表';
 
 -- -------------------------------------------------------
@@ -343,3 +349,45 @@ INSERT INTO pb_system_config (config_key, config_value, description) VALUES
 ('hot_article_days', '7', '热榜统计天数'),
 ('comment_need_audit', 'true', '评论是否需要审核'),
 ('upload_max_size', '10485760', '文件上传大小限制(字节)');
+
+-- ============================================================
+-- 16. pb_tree 目录树主表（首次部署可直接执行；已上线库改用 backend/sql/init_tree.sql 的幂等 ALTER）
+-- ============================================================
+DROP TABLE IF EXISTS pb_tree;
+CREATE TABLE pb_tree (
+    id           BIGINT UNSIGNED  NOT NULL                              COMMENT '主表ID',
+    code         VARCHAR(64)      NOT NULL                              COMMENT '唯一编码（如 java / frontend）',
+    name         VARCHAR(64)      NOT NULL                              COMMENT '名称',
+    description  VARCHAR(255)     DEFAULT NULL                          COMMENT '描述',
+    cover_color  VARCHAR(16)      DEFAULT '#2563eb'                     COMMENT '主色',
+    sort_order   INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '排序',
+    status       TINYINT UNSIGNED NOT NULL DEFAULT 1                    COMMENT '1-启用 0-禁用',
+    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
+    updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_pb_tree_code (code),
+    KEY idx_pb_tree_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目录树主表';
+
+-- ============================================================
+-- 17. pb_tree_node 目录树节点表
+-- ============================================================
+DROP TABLE IF EXISTS pb_tree_node;
+CREATE TABLE pb_tree_node (
+    id            BIGINT UNSIGNED  NOT NULL                              COMMENT '节点ID',
+    tree_id       BIGINT UNSIGNED  NOT NULL                              COMMENT '所属目录树',
+    parent_id     BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '父节点 0/NULL=根',
+    name          VARCHAR(128)     NOT NULL                              COMMENT '节点名称',
+    color         VARCHAR(16)      DEFAULT NULL                          COMMENT '节点颜色',
+    sort_order    INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '排序',
+    depth         INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '0=根',
+    path          VARCHAR(512)     DEFAULT NULL                          COMMENT '物化路径 /id1/id2/id3/',
+    article_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '已挂文章数',
+    created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
+    updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
+    PRIMARY KEY (id),
+    KEY idx_pb_tree_node_tree_parent (tree_id, parent_id),
+    KEY idx_pb_tree_node_tree_path   (tree_id, path)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目录树节点';

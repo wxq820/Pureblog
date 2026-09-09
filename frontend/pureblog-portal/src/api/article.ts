@@ -4,6 +4,9 @@ import type { ApiResponse, ArticleListVO, ArticleDetailVO, PageResult } from '@/
 export interface ArticleQuery {
   categoryId?: number
   tagId?: number
+  authorId?: number
+  treeId?: number
+  treeNodeId?: number
   keyword?: string
   sortBy?: string
   sortOrder?: string

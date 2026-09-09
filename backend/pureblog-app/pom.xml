@@ -53,6 +53,10 @@
         </dependency>
         <dependency>
             <groupId>com.pureblog</groupId>
+            <artifactId>pureblog-upload</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pureblog</groupId>
             <artifactId>pureblog-admin</artifactId>
         </dependency>
 

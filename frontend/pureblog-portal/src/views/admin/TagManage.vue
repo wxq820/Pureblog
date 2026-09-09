@@ -4,11 +4,11 @@
     <div class="mb-4">
       <el-button type="primary" size="small" @click="showDialog()">新增标签</el-button>
     </div>
-    <el-table :data="tags" stripe v-loading="loading">
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="名称" width="200" />
-      <el-table-column prop="slug" label="别名" width="200" />
-      <el-table-column label="操作" width="200">
+    <el-table :data="tags" stripe v-loading="loading" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="80" align="center" />
+      <el-table-column prop="name" label="名称" min-width="200" align="center" />
+      <el-table-column prop="slug" label="别名" min-width="200" align="center" />
+      <el-table-column label="操作" width="200" align="center">
         <template #default="{ row }">
           <el-button text type="primary" size="small" @click="showDialog(row)">编辑</el-button>
           <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
@@ -65,14 +65,21 @@ async function save() {
     ElMessage.success('保存成功')
     dialogVisible.value = false
     loadData()
+  } catch (err: any) {
+    ElMessage.error(err?.message || '保存失败')
   } finally { saving.value = false }
 }
 
 async function remove(id: number) {
-  await ElMessageBox.confirm('确认删除?', '提示')
-  await request.delete<any, any>(`/admin/tag/${id}`)
-  ElMessage.success('已删除')
-  loadData()
+  try {
+    await ElMessageBox.confirm('确认删除?', '提示')
+    await request.delete<any, any>(`/admin/tag/${id}`)
+    ElMessage.success('已删除')
+    loadData()
+  } catch (err: any) {
+    if (err === 'cancel' || err === 'close') return
+    ElMessage.error(err?.message || '删除失败')
+  }
 }
 
 onMounted(loadData)

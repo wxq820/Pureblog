@@ -1,6 +1,6 @@
 # 10 Cursor 开发 Prompt 模板
 
-下面这些 Prompt 可以直接复制给 Cursor。所有 Prompt 假设 Cursor 已经读取 `docs/09_Cursor协作规则.md`。
+下面这些 Prompt 可以直接复制给 Cursor。所有 Prompt 假设 Cursor 已经读取 `docs/09_Cursor协作规则.md` 和 `.cursor/rules/docs-sync.mdc`。
 
 ---
 
@@ -13,6 +13,7 @@
 - 接口：docs/06_API接口清单.md
 - 表结构：docs/04_数据库设计.sql
 - 协作规则：docs/09_Cursor协作规则.md
+- 文档同步规则：.cursor/rules/docs-sync.mdc
 
 要求：
 1. 先定位问题代码，给出文件路径和行号
@@ -20,6 +21,7 @@
 3. 给出修复代码（完整文件或 diff）
 4. 给出本地验证步骤
 5. 给出下一步建议
+6. 如有接口/表结构变更，列出对应 docs/ 同步项
 ```
 
 ---
@@ -33,7 +35,7 @@
 - 功能：[业务描述]
 - 入参：[DTO 字段]
 - 出参：[VO 字段]
-- 权限：管理员
+- 权限：管理员（LoginUserHolder.get().isAdmin()）
 
 参考文档：
 - docs/06_API接口清单.md 第 9 节
@@ -43,6 +45,7 @@
 1. 给出 Service / Controller / DTO / VO 完整代码
 2. 给出单元/手动验证步骤
 3. 不要修改其他模块
+4. 同步更新 docs/06_API接口清单.md
 ```
 
 ---
@@ -102,21 +105,20 @@
 
 ---
 
-## 6. 集成 MinIO
+## 6. 接入文件存储（OSS / S3）
 
 ```text
-请为项目接入 MinIO 文件上传。
+请把当前的文件上传从本地 ./uploads/ 切换到 [OSS/S3]。
 
 前置：
 - 表结构已建：pb_file（见 docs/04_数据库设计.sql）
-- 现有附件字段：ArticleDO.cover_url（URL 字符串）
+- 当前实现：UploadController（仅本地存储）
 
 要求：
-1. 引入 MinIO 客户端依赖
-2. 提供上传接口（POST /api/file/upload）
-3. 上传完后回写 URL
-4. 给出前端调用示例
-5. 给出权限配置（仅登录用户可上传）
+1. 替换 UploadController 的存储实现，接口签名不变
+2. 配置项放到 application.yml
+3. 给出本地验证步骤（仍可在 dev 环境下走本地存储）
+4. 同步更新 docs/01、docs/06
 ```
 
 ---
@@ -164,7 +166,8 @@
 1. 启动 MySQL 与 Redis（docker compose -f deploy/docker-compose.dev.yml up -d）
 2. 启动 Elasticsearch（参考 README）
 3. 初始化数据库（mysql -uroot -p123456 < scripts/schema.sql）
-4. 在 backend 目录执行 mvn -pl pureblog-app -am spring-boot:run
+4. 初始化目录树（mysql -uroot -p123456 pureblog < backend/sql/init_tree.sql）
+5. 在 backend 目录执行 mvn -pl pureblog-app -am spring-boot:run
 
 请给出预期输出与可能的错误处理。
 ```
@@ -184,6 +187,8 @@
 5. 是否有 DTO/VO/DO 混用
 6. 是否有事务边界问题
 7. 是否有接口重复 / 死代码
+8. 鉴权是否走 LoginUserHolder（而不是 SecurityContext）
+9. 文章保存是否调用 treeService.assertIsLeaf
 
 输出格式：
 - 问题位置
@@ -217,6 +222,7 @@
 2. 暴露 /actuator/prometheus
 3. 给关键 Service 方法加 @Timed
 4. 给出 Grafana 看板字段建议
+5. 同步更新 docs/01、docs/08
 ```
 
 ---
@@ -244,10 +250,49 @@
 3. 写 pb_article_tag
 4. 更新 user.article_count
 5. 更新 category.article_count
+6. treeService.incrementArticleCount(treeNodeId)
 
 要求：
 1. 用 @Transactional 包裹
 2. rollbackFor = Exception.class
 3. 失败日志详细
 4. 验证：故意制造异常，确认全部回滚
+```
+
+---
+
+## 15. 接通树节点 → 文章列表
+
+```text
+请把首页目录树选中后的「按节点过滤文章列表」接通。
+
+当前状态：
+- 后端：ArticleServiceImpl.getArticleList 已经支持 treeId / treeNodeId 过滤
+- 前端：SkillTree 选中 depth>=2 节点后，期望 HomePage 右侧列表按该节点过滤
+- 前端路由：?nodeId=X&treeId=Y
+
+要求：
+1. SkillTree.vue onClick 命中 depth>=2 节点时 router.push({ query: { nodeId, treeId } })
+2. HomePage.vue watch route.query.nodeId 清空 articles + 重置 page + 调 articleApi.getList({ treeNodeId, treeId, page: 1 })
+3. 顶部展示当前选中节点路径
+4. 同步更新 docs/02、docs/05、docs/06
+5. 给出验证步骤
+```
+
+---
+
+## 16. 修排序 bug
+
+```text
+请修 ArticleServiceImpl.getArticleList 的排序 bug。
+
+当前 bug：
+- 代码用 switch 解析了 sortField 变量，但从来没把它传给 LambdaQueryWrapper
+- wrapper 始终 orderByDesc(isTop).orderByDesc(viewCount).orderByDesc(publishedAt)，sortBy 参数失效
+
+要求：
+1. 修复排序：isTop 置顶优先 → 按 sortBy 指定的字段（viewCount/likeCount/commentCount/publishedAt）→ asc/desc
+2. 不要改其他逻辑
+3. 同步更新 docs/02、docs/06、docs/10 的对应章节
+4. 给出验证方法
 ```

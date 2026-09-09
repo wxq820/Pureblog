@@ -13,6 +13,73 @@
 
 ---
 
+## 0. 目录树模块（Tree）
+
+> 与 `pb_category`（分类）是两个独立维度：分类用于「文章归类」，目录树用于「按技术栈/知识图谱组织」。文章**必须**挂到目录树的叶子节点才能保存。
+
+### 0.1 公开端点（前台）
+
+#### 0.1.1 列出所有启用目录树
+- `GET /api/tree/public/list`
+- 公开
+
+#### 0.1.2 获取某棵树的完整嵌套结构
+- `GET /api/tree/public/{code}`
+- Path：`code` 为目录树唯一编码（如 `java`）
+- 公开
+
+### 0.2 后台端点：树主表（需管理员）
+
+#### 0.2.1 列出所有树
+- `GET /api/admin/tree/list`
+- 需管理员
+
+#### 0.2.2 新建树
+- `POST /api/admin/tree/create`
+- Body：`{code, name, description?, coverColor?, sortOrder?}`
+- 需管理员
+
+#### 0.2.3 更新树
+- `PUT /api/admin/tree/update`
+- Body：`{id, name?, description?, coverColor?, sortOrder?, status?}`
+- 需管理员
+
+#### 0.2.4 更新树状态
+- `POST /api/admin/tree/status/{id}?status=1|0`
+- 需管理员
+
+#### 0.2.5 删除树（仅当节点数 ≤ 1）
+- `DELETE /api/admin/tree/{id}`
+- 需管理员
+
+### 0.3 后台端点：树节点（需管理员）
+
+#### 0.3.1 列出某棵树的所有节点
+- `GET /api/admin/tree-node/list/{treeId}`
+- 公开（白名单未拦截）
+
+#### 0.3.2 新建节点
+- `POST /api/admin/tree-node/create`
+- Body：`{treeId, parentId, name, color?, sortOrder?}`
+- 需管理员
+
+#### 0.3.3 更新节点
+- `PUT /api/admin/tree-node/update`
+- Body：`{id, name?, color?, sortOrder?}`
+- 需管理员
+
+#### 0.3.4 移动节点
+- `POST /api/admin/tree-node/move`
+- Body：`{id, newParentId, newSortOrder?}`
+- 需管理员
+- 不允许把节点移到自己的后代里；只允许同树内移动
+
+#### 0.3.5 删除节点（无子节点 + 无文章）
+- `DELETE /api/admin/tree-node/{id}`
+- 需管理员
+
+---
+
 ## 1. 认证模块
 
 ### 1.1 登录
@@ -24,6 +91,7 @@
 - `POST /api/auth/register`
 - Body: `{username, password, email, nickname?}`
 - 公开
+- **当前默认不在前端引导**（个人博客定位，新账号直接写库 `pb_user` + BCrypt）
 
 ### 1.3 刷新 Token
 - `POST /api/auth/refresh`
@@ -77,7 +145,11 @@
 ## 3. 文章模块（前台）
 
 ### 3.1 文章列表
-- `GET /api/article/list?page=1&size=10&keyword=&categoryId=&tagId=&sortBy=&sortOrder=`
+- `GET /api/article/list?page=1&size=10&keyword=&categoryId=&tagId=&treeId=&treeNodeId=&sortBy=&sortOrder=`
+- `sortBy`: `publishedAt`（默认） | `viewCount` | `likeCount` | `commentCount`
+- `sortOrder`: `asc` | `desc`（默认）
+- 排序优先级：`is_top` 置顶优先 → 按 `sortBy` 指定的字段 → `published_at`
+- `treeId` / `treeNodeId` 为可选过滤项；两者都给时以 `treeNodeId` 为准
 - 公开
 
 ### 3.2 文章详情

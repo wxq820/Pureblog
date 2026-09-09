@@ -1,18 +1,31 @@
-# Frontend Implementation Rules
+# 前端实现规则
 
-## Stack
+## 技术栈
 - Vue3 + TypeScript
-- Pinia for state
-- Vue Router for routing
-- Element Plus for admin
+- 使用 Pinia 进行状态管理
+- 使用 Vue Router 进行路由管理
+- 后台管理使用 Element Plus
 
-## Structure
-- portal and admin are separated projects
-- API requests must be encapsulated under `/api`
-- route guards should handle auth and admin role check
-- forms must have validation
+## 结构
+- 门户端和后台管理是独立的两个项目
+- API 请求必须统一封装在 `/api` 目录下
+- 路由守卫需处理登录鉴权和管理员角色校验
+- 表单必须带有校验
 
-## UI priority
-- Functionality first
-- Keep pages clean and maintainable
-- Avoid over-designed UI in early phase
+## UI 优先级
+- 功能优先
+- 保持页面整洁、可维护
+- 早期阶段避免过度设计的 UI
+
+## 一致性约束
+- **顶部导航位置必须跨路由一致**：公开页 `AppHeader` 和管理页 `AdminLayout` 的 header 必须使用相同的 max-width + 居中容器（参考 `.container`：`max-width: var(--max-width); margin: 0 auto; padding: 0 20px;`），保证 logo、tabs、右上角操作栏的横向位置在公开页与管理页之间完全一致，**禁止**只在 admin header 用裸 `padding: 0 24px` 导致切换时左对齐。
+
+- **Header 跨页面必须逐字一致**：`AppHeader.vue` 和 `AdminLayout.vue` 中的 `.logo`、`.user-menu`、`.admin-tabs` 样式块以及 el-dropdown 菜单项必须保持逐字相同；`el-tabs` 模板结构对齐（仅在登录时显示）；`.container` 与 `.header-inner` 等价（`max-width: var(--max-width); margin: 0 auto; padding: 0 20px`）。禁止两处各自维护近似但不同的样式，保证 logo、tabs、右上角操作栏的横向像素位置完全一致。
+
+- **AppHeader 是全站唯一 Header 组件**：所有 layout（含 AdminLayout）必须通过 `<AppHeader />` 引入，禁止在 layout 内重复定义 header DOM/模板/样式/脚本（activeTab、watch、onTabClick、handleCommand 等逻辑只在 AppHeader 内维护一份）。如需扩展，按 prop 设计而不是复制粘贴。
+
+- **统一走页面级滚动**：所有 layout 的根容器必须是 `min-height: 100vh; display: flex; flex-direction: column`，主内容区只允许 `flex: 1; background: ...` 等基础样式，**禁止**使用 `overflow-y: auto/scroll/hidden` 在内部创建独立滚动条（`height: 100vh` + `overflow: hidden` 也是禁止模式）。页面级滚动条由浏览器统一管理，避免滚动条出现/消失引发视口宽度抖动。
+
+- **原生滚动条统一隐藏**：`main.css` 中 `html { scrollbar-width: none; -ms-overflow-style: none }` + `html::-webkit-scrollbar { display: none; width: 0; height: 0 }` + `body::-webkit-scrollbar { display: none; width: 0; height: 0 }` 这四条规则必须全部保留，禁止改回 `auto` 或显示原生滚动条。隐藏滚动条不改变滚动行为——鼠标滚轮 / 触摸板 / 方向键 / PageUp/Down 全部正常。任一页面都不应出现原生滚动条（首页、管理页、文章详情页等），从而消除任何因滚动条出现/消失导致的 ~17px 视口宽度漂移。
+- **永久预留滚动条槽（已升级为隐藏原生滚动条）**：原生滚动条隐藏规则见上一条。`AppHeader.vue` 必须使用 `position: fixed; top: 0; left: 0; right: 0`（不是 sticky），使 header 彻底脱离 flex 布局的 reflow 链，始终钉死在视口顶层。`body { min-height: 100vh }` 替代 `height: 100%`，禁止在 flex 子项上使用 `height: 100%`（会导致 reflow 漂移）。两个 layout 的主内容区必须留 `padding-top: 72px`（或实测 header 高度）以避免内容被 fixed header 遮挡。`html` / `body` 元素的滚动行为必须保留（依赖默认 + `overflow-x: hidden` 推导出的 `overflow-y: auto`），禁止显式设 `overflow: hidden`（会禁用滚动）。
+- **管理页顶栏铺满、内容区约束宽度**：`.admin-header` 必须铺满视口（padding: 12px 0，与 AppHeader 对齐），`.admin-content` 必须使用与 `DefaultLayout` 相同的 max-width 容器（`max-width: var(--max-width); margin: 0 auto; padding: 24px 20px`），禁止全屏铺满，确保管理页内容区与首页内容区横向像素完全对齐。
