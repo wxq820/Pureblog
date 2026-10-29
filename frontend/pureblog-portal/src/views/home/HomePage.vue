@@ -11,6 +11,24 @@
 
     <div class="content-grid">
       <aside class="left-sidebar">
+        <div v-if="userStore.isLogin" class="card widget-card">
+          <h3 class="section-title">小工具</h3>
+          <div class="widget-grid">
+            <router-link
+              v-for="w in widgets"
+              :key="w.id"
+              :to="w.path"
+              class="widget-item"
+            >
+              <div class="widget-icon" :style="{ backgroundColor: w.iconColor }">
+                <el-icon><component :is="widgetIconComp(w)" /></el-icon>
+              </div>
+              <div class="widget-name">{{ w.name }}</div>
+            </router-link>
+            <div v-if="!widgets.length" class="empty-widgets text-secondary">暂无小工具</div>
+          </div>
+        </div>
+
         <div class="card hot-card">
           <div class="tab-header">
             <button :class="['tab-btn', { active: articleTab === 'hot' }]"
@@ -27,7 +45,10 @@
           </div>
 
           <div v-show="articleTab === 'latest'" class="article-list">
-            <ArticleCard v-for="article in articles" :key="article.id" :article="article" />
+            <div v-for="(article, i) in articles" :key="article.id" class="hot-item" @click="$router.push(`/article/${article.id}`)">
+              <span class="rank">{{ i + 1 }}</span>
+              <span class="title">{{ article.title }}</span>
+            </div>
             <div v-if="loading" class="loading text-secondary">加载中...</div>
             <div v-if="!loading && articles.length === 0" class="empty text-secondary">暂无文章</div>
             <button v-if="hasMore && articleTab === 'latest'" class="btn btn-outline load-more" @click="loadMore">加载更多</button>
@@ -67,17 +88,21 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { articleApi } from '@/api/article'
 import { treeApi } from '@/api/tree'
-import ArticleCard from '@/components/ArticleCard.vue'
+import { widgetApi } from '@/api/widget'
 import SkillTree from '@/components/SkillTree.vue'
-import type { ArticleListVO, SkillTreeSummary, SkillTreeNode } from '@/types'
+import { useUserStore } from '@/stores/user'
+import { resolveWidgetIcon } from '@/constants/widgetIcons'
+import type { ArticleListVO, SkillTreeSummary, SkillTreeNode, WidgetVO } from '@/types'
 
 const router = useRouter()
 const route = useRoute()
+const userStore = useUserStore()
 const searchKeyword = ref('')
 const articleTab = ref<'hot' | 'latest'>('hot')
 const articles = ref<ArticleListVO[]>([])
 const hotArticles = ref<ArticleListVO[]>([])
 const categories = ref<any[]>([])
+const widgets = ref<WidgetVO[]>([])
 const loading = ref(false)
 const page = ref(1)
 const hasMore = ref(true)
@@ -130,6 +155,24 @@ async function loadCategories() {
   categories.value = res.data
 }
 
+async function loadWidgets() {
+  if (!userStore.isLogin) {
+    widgets.value = []
+    return
+  }
+  try {
+    const res = await widgetApi.list()
+    widgets.value = res.data
+  } catch (err) {
+    // 静默: 小工具拉取失败不影响首页
+    widgets.value = []
+  }
+}
+
+function widgetIconComp(w: WidgetVO) {
+  return resolveWidgetIcon(w.icon, w.code)
+}
+
 async function loadTrees() {
   const res = await treeApi.listPublic()
   trees.value = (res.data || []).map((t: any) => ({
@@ -179,6 +222,7 @@ onMounted(() => {
   loadArticles()
   loadHot()
   loadCategories()
+  loadWidgets()
   loadTrees()
 })
 
@@ -218,9 +262,12 @@ watch(articleTab, async (tab) => {
 .search-box { max-width: 600px; margin: 24px auto 0; display: flex; gap: 8px; }
 .search-box .input { flex: 1; }
 .section-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid var(--primary); display: inline-block; }
-.article-list { display: flex; flex-direction: column; gap: 16px; }
+.article-list { display: flex; flex-direction: column; gap: 8px; }
 .load-more { width: 100%; justify-content: center; margin-top: 16px; }
 .hot-list { display: flex; flex-direction: column; gap: 8px; }
+/* Tab 内容区固定高度 + 内部滚动: 热门/最新切换时卡片高度不变, 整页不会被拉长 */
+.hot-card { display: flex; flex-direction: column; height: 420px; }
+.hot-list, .article-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 .hot-item { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .hot-item .rank { width: 20px; height: 20px; background: var(--primary); color: white; border-radius: 4px; font-size: 12px; display: flex; align-items: center; justify-content: center; }
 .hot-item .title { font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -228,10 +275,37 @@ watch(articleTab, async (tab) => {
 .category-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); }
 
 .content-grid { display: grid; grid-template-columns: 1fr 3fr; gap: 24px; flex: 1; min-height: 0; }
-.left-sidebar { display: grid; grid-template-rows: 2fr 1fr; gap: 16px; min-width: 0; min-height: 0; overflow: hidden; }
+/* grid-auto-rows: 未登录时小工具卡片不渲染, 行数变少也不会留空行 */
+.left-sidebar { display: grid; grid-template-rows: none; grid-auto-rows: minmax(0, 1fr); gap: 16px; min-width: 0; min-height: 0; overflow: hidden; }
 .tree-pane { min-height: 0; min-width: 0; display: flex; flex-direction: column; }
 .left-sidebar .card { min-height: 0; overflow: auto; }
 .tree-pane .skill-tree-section { width: 100%; flex: 1; min-height: 0; }
+
+/* 小工具卡片 */
+.widget-card { padding-bottom: 12px; }
+.widget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 4px;
+}
+.widget-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  text-decoration: none; color: var(--text-primary);
+  padding: 8px 4px; border-radius: 8px;
+  transition: all 0.15s;
+}
+.widget-item:hover { background: var(--bg-secondary); }
+.widget-item:hover .widget-icon { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.widget-icon {
+  width: 56px; height: 56px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: #fff;
+  transition: all 0.15s;
+}
+.widget-icon :deep(svg) { width: 1em; height: 1em; }
+.widget-name { font-size: 12px; text-align: center; }
+.empty-widgets { grid-column: 1 / -1; padding: 24px; text-align: center; font-size: 13px; }
 
 .tree-tabs { display: flex; gap: 8px; padding: 0 16px; background: white; border-bottom: 1px solid var(--border); }
 .tree-tab-btn { background: transparent; border: none; padding: 12px 14px; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 3px solid transparent; color: var(--text-secondary); transition: all 0.15s; }
@@ -247,7 +321,7 @@ watch(articleTab, async (tab) => {
 
 @media (max-width: 900px) {
   .content-grid { grid-template-columns: 1fr; }
-  .left-sidebar { grid-template-rows: auto auto; }
+  .left-sidebar { grid-template-rows: none; grid-auto-rows: auto; }
   .tree-pane { min-height: 480px; }
 }
 </style>

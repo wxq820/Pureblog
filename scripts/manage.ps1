@@ -1,5 +1,11 @@
-# PureBlog 一键启动 PowerShell 脚本
-# 启动后端、前台 portal、管理后台三个服务，互不依赖
+# PureBlog 服务管理 PowerShell 脚本
+# 用法:
+#   .\scripts\manage.ps1          启动后端 + portal
+#   .\scripts\manage.ps1 -Status  查看端口状态
+#   .\scripts\manage.ps1 -Stop    停止服务
+#
+# 注: 后端默认跑在 Docker 的 jdk17 容器里 (与 scripts\start-all.bat 一致),
+#     本脚本的启动后端分支用于「不跑 Docker、只跑宿主机 JVM」的场景。
 param(
     [switch]$Stop,
     [switch]$Status
@@ -8,10 +14,35 @@ param(
 $ErrorActionPreference = 'SilentlyContinue'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $LogsDir = Join-Path $ProjectRoot 'logs'
-$JavaHome = 'D:\IntelliJ IDEA 2023.3.8\jbr'
 $JarPath = Join-Path $ProjectRoot 'backend\pureblog-app\target\pureblog-app-1.0.0.jar'
 $PortalDir = Join-Path $ProjectRoot 'frontend\pureblog-portal'
-$AdminDir = Join-Path $ProjectRoot 'frontend\pureblog-admin-web'
+
+function Resolve-JavaHome {
+    # 1) 环境变量优先
+    if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
+        return $env:JAVA_HOME
+    }
+    # 2) 常见的 JDK 17 安装目录
+    $candidates = @(
+        'C:\Program Files\Java\jdk-17',
+        'C:\Program Files\Java\jdk-21',
+        'C:\Program Files\Eclipse Adoptium\jdk-17',
+        'C:\Program Files\Eclipse Adoptium\jdk-21'
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path (Join-Path $c 'bin\java.exe')) { return $c }
+    }
+    # 3) JetBrains 自带的 jbr (取版本号最大的一个)
+    $jetbrains = Get-ChildItem 'C:\Program Files\JetBrains' -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path (Join-Path $_.FullName 'jbr\bin\java.exe') } |
+        Sort-Object Name -Descending
+    if ($jetbrains) {
+        return (Join-Path $jetbrains[0].FullName 'jbr')
+    }
+    return $null
+}
+
+$JavaHome = Resolve-JavaHome
 
 if ($Stop) {
     Write-Host "[PureBlog] Stopping services ..."
@@ -27,7 +58,8 @@ if ($Stop) {
 
 if ($Status) {
     Write-Host "[PureBlog] Service status:"
-    foreach ($port in 3000, 3001, 8080) {
+    # 只有 portal(3000) 与 backend(8080) 两个服务, 没有独立的 admin 前端
+    foreach ($port in 3000, 8080) {
         $conn = Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($conn) {
             $proc = Get-Process -Id $conn.OwningProcess -ErrorAction SilentlyContinue
@@ -36,6 +68,9 @@ if ($Status) {
             Write-Host "  :$port  DOWN"
         }
     }
+    Write-Host ""
+    Write-Host "  docker containers:"
+    docker ps --format "  {{.Names}}`t{{.Status}}" 2>$null
     exit 0
 }
 
@@ -44,11 +79,16 @@ if (-not (Test-Path $LogsDir)) {
 }
 
 # 清空日志
-'backend', 'portal', 'admin' | ForEach-Object {
+'backend', 'portal' | ForEach-Object {
     foreach ($ext in 'out', 'err') {
         $p = Join-Path $LogsDir "$_.$ext"
         if (Test-Path $p) { Clear-Content $p -Force }
     }
+}
+
+if (-not $JavaHome) {
+    Write-Host "[PureBlog] ERROR: 未找到 JDK 17+, 请设置 JAVA_HOME 后重试。"
+    exit 1
 }
 
 function Start-Detached {
@@ -94,18 +134,8 @@ Start-Detached `
     -StderrLog (Join-Path $LogsDir 'portal.err') `
     -WindowTitle 'PureBlogPortal'
 
-Write-Host "[PureBlog] Starting admin (port 3001) ..."
-Start-Detached `
-    -FilePath 'cmd.exe' `
-    -ArgumentList "/c npm.cmd run dev" `
-    -WorkingDirectory $AdminDir `
-    -StdoutLog (Join-Path $LogsDir 'admin.out') `
-    -StderrLog (Join-Path $LogsDir 'admin.err') `
-    -WindowTitle 'PureBlogAdmin'
-
 Write-Host ""
 Write-Host "[PureBlog] All launched. Use -Status to check, -Stop to stop."
 Write-Host "  - backend  : http://127.0.0.1:8080"
 Write-Host "  - portal   : http://127.0.0.1:3000"
-Write-Host "  - admin    : http://127.0.0.1:3001"
 Write-Host "  - logs     : $LogsDir"

@@ -14,6 +14,7 @@ const router = createRouter({
         { path: 'search', name: 'search', component: () => import('@/views/search/SearchPage.vue') },
         { path: 'user/:id', name: 'user-profile', component: () => import('@/views/user/UserProfile.vue') },
         { path: 'notifications', name: 'notifications', component: () => import('@/views/notification/NotificationList.vue'), meta: { requiresAuth: true } },
+        { path: 'widget/:code', name: 'widget-detail', component: () => import('@/views/widget/WidgetDetail.vue'), meta: { requiresAuth: true } },
       ]
     },
     // 管理后台：独立布局，铺满右侧
@@ -27,7 +28,8 @@ const router = createRouter({
         { path: 'category/manage', name: 'category-manage', component: () => import('@/views/admin/CategoryManage.vue') },
         { path: 'tag/manage', name: 'tag-manage', component: () => import('@/views/admin/TagManage.vue') },
         { path: 'tree/manage', name: 'tree-manage', component: () => import('@/views/admin/TreeManage.vue') },
-        { path: 'tree/node/:treeId', name: 'tree-node-manage', component: () => import('@/views/admin/TreeNodeManage.vue') }
+        { path: 'tree/node/:treeId', name: 'tree-node-manage', component: () => import('@/views/admin/TreeNodeManage.vue') },
+        { path: 'widget/manage', name: 'widget-manage', component: () => import('@/views/admin/WidgetManage.vue') }
       ]
     },
     { path: '/login', name: 'login', component: () => import('@/views/user/Login.vue') }
@@ -38,7 +40,8 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth) {
     const userStore = useUserStore()
     if (!userStore.token) {
-      next('/login')
+      // 记住来源, 登录后跳回
+      next({ path: '/login', query: { redirect: to.fullPath } })
       return
     }
   }

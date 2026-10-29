@@ -33,25 +33,24 @@
 | `pureblog-user` | `pureblog-common`、`pureblog-auth`（共享 UserDO） |
 | `pureblog-article` | `pureblog-common`、`pureblog-auth`、`pureblog-tree`（反向依赖以校验叶子） |
 | `pureblog-comment` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
-| `pureblog-search` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
 | `pureblog-notification` | `pureblog-common`、`pureblog-auth` |
 | `pureblog-stats` | `pureblog-common`、`pureblog-article`、`pureblog-auth` |
 | `pureblog-tree` | `pureblog-common` |
 | `pureblog-admin` | `pureblog-common`、`pureblog-article`、`pureblog-comment`、`pureblog-stats` |
 | `pureblog-app` | 全部子模块 |
 
-禁止反向依赖。例如：`pureblog-article` 不得直接调用 `pureblog-search` 的 Service。
+禁止反向依赖。例如：`pureblog-comment` 不得直接调用 `pureblog-notification` 的 Service。
 
 ---
 
 ## 4. 数据库规则
 
 - 表前缀统一 `pb_`
-- 主键统一 `BIGINT UNSIGNED AUTO_INCREMENT`
+- 主键统一 `BIGINT UNSIGNED`：核心博客表用 `AUTO_INCREMENT`，小工具 / 财务模块表用应用层雪花 ID（`IdType.ASSIGN_ID`）
 - 软删除字段统一 `deleted TINYINT(0=未删, 1=已删)`
 - 时间字段 `created_at`、`updated_at`，可选 `deleted_at`
 - 状态字段统一 `TINYINT`，对应枚举 `getCode()`
-- 新增表/字段必须同步更新 `docs/04_数据库设计.sql`
+- 新增表/字段必须同步更新 `docs/04_数据库设计.sql`（设计说明）与 `scripts/schema.sql`（建库真相源）
 - 复杂查询优先索引优化，不在业务代码里绕 SQL
 - 目录树表 `pb_tree` / `pb_tree_node` 与文章挂载字段 `pb_article.tree_id` / `pb_article.tree_node_id` 由 `backend/sql/init_tree.sql`（幂等 ALTER）维护
 
@@ -112,11 +111,13 @@
 
 ## 9. 搜索规则
 
-1. 只同步已发布（status=PUBLISHED）文章到 ES
-2. 删除 / 下线文章时索引必须同步删除
-3. 搜索结果要支持高亮（title / summary / content）
+1. 只返回已发布文章（`status=PUBLISHED` 且 `deleted=0`）
+2. 关键词匹配范围：标题 OR 摘要 OR 正文 OR 标签名
+3. 搜索结果要支持高亮（title / 正文片段）
 4. 支持分类 / 标签过滤
-5. 提供重建索引入口（`POST /api/search/index/rebuild`）
+5. **服务端必须先 HTML 转义原文再插入 `<em>` 标签**（前端用 `v-html` 渲染 `title` 与 `highlights`，不转义会造成 XSS）；`summary` 由前端 `{{ }}` 插值渲染，不转义
+6. LIKE 通配符（`%` `_`）按字面量处理（`ESCAPE '!'`）
+7. 无索引、无索引重建入口 —— 搜索直接读主库
 
 ---
 

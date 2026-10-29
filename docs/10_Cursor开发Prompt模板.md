@@ -105,68 +105,31 @@
 
 ---
 
-## 6. 接入文件存储（OSS / S3）
+## 6. 加入搜索结果缓存预热
 
 ```text
-请把当前的文件上传从本地 ./uploads/ 切换到 [OSS/S3]。
-
-前置：
-- 表结构已建：pb_file（见 docs/04_数据库设计.sql）
-- 当前实现：UploadController（仅本地存储）
-
-要求：
-1. 替换 UploadController 的存储实现，接口签名不变
-2. 配置项放到 application.yml
-3. 给出本地验证步骤（仍可在 dev 环境下走本地存储）
-4. 同步更新 docs/01、docs/06
-```
-
----
-
-## 7. 加入限流
-
-```text
-请为评论接口加入限流（按用户维度，5 秒内最多 3 次）。
+请实现定时任务：每天凌晨 3 点预热热门文章的搜索结果缓存。
 
 参考：
-- Redis 工具：RedisTemplate
-- 规则：docs/09_Cursor协作规则.md 第 6 节
-
-要求：
-1. 用 Redis 原子命令 + 滑动窗口
-2. 限流 key：pureblog:rate:comment:{userId}
-3. 超限返回 RATE_LIMIT_EXCEEDED
-4. 给出验证方法
-```
-
----
-
-## 8. 加入 ES 全量重建
-
-```text
-请实现定时任务：每天凌晨 3 点全量重建 ES 索引。
-
-参考：
-- SearchServiceImpl.rebuildAllIndex
+- ArticleCacheManager 的详情缓存写法
 - 规则：docs/09_Cursor协作规则.md 第 9 节
 
 要求：
 1. 在 StatsServiceImpl 或新 Schedule 类中加 @Scheduled(cron = "0 0 3 * * ?")
-2. 调用 searchService.rebuildAllIndex
+2. 预热内容：热门文章详情缓存 + 标签列表缓存
 3. 失败日志要详细
 4. 给出验证方法
 ```
 
 ---
 
-## 9. 启动后端
+## 7. 启动后端
 
 ```text
 请帮我启动后端。具体步骤：
-1. 启动 MySQL 与 Redis（docker compose -f deploy/docker-compose.dev.yml up -d）
-2. 启动 Elasticsearch（参考 README）
-3. 初始化数据库（mysql -uroot -p123456 < scripts/schema.sql）
-4. 初始化目录树（mysql -uroot -p123456 pureblog < backend/sql/init_tree.sql）
+1. 启动基础设施（docker compose up -d，项目根目录执行）
+2. 初始化数据库（docker exec -i pureblog-mysql mysql -uroot -p123456 pureblog < scripts/schema.sql）
+3. 初始化目录树 / 小工具 / 财务模块（docker exec -i pureblog-mysql mysql -uroot -p123456 pureblog < backend/sql/init_tree.sql，等价 init_widget.sql / init_finance.sql）
 5. 在 backend 目录执行 mvn -pl pureblog-app -am spring-boot:run
 
 请给出预期输出与可能的错误处理。
@@ -174,7 +137,7 @@
 
 ---
 
-## 10. 做一次代码审查
+## 8. 做一次代码审查
 
 ```text
 请作为资深 Java 架构师，按 docs/09_Cursor协作规则.md 对当前项目代码进行审查。
@@ -199,7 +162,7 @@
 
 ---
 
-## 11. 性能压测
+## 9. 性能压测
 
 ```text
 请基于 k6 或 wrk 写一份压测脚本，模拟 100 并发访问文章详情接口。
@@ -212,22 +175,7 @@
 
 ---
 
-## 12. 接入 Prometheus
-
-```text
-请为项目集成 Micrometer + Prometheus。
-
-要求：
-1. 引入 micrometer-registry-prometheus 依赖
-2. 暴露 /actuator/prometheus
-3. 给关键 Service 方法加 @Timed
-4. 给出 Grafana 看板字段建议
-5. 同步更新 docs/01、docs/08
-```
-
----
-
-## 13. 调整接口
+## 10. 调整接口
 
 ```text
 请修改 /api/article/list 接口，增加一个参数：tagIds（多标签 AND 过滤）。
@@ -241,7 +189,7 @@
 
 ---
 
-## 14. 加一条事务一致性保障
+## 11. 加一条事务一致性保障
 
 ```text
 发布文章时，需要同时：
@@ -261,7 +209,7 @@
 
 ---
 
-## 15. 接通树节点 → 文章列表
+## 12. 接通树节点 → 文章列表
 
 ```text
 请把首页目录树选中后的「按节点过滤文章列表」接通。
@@ -281,7 +229,7 @@
 
 ---
 
-## 16. 修排序 bug
+## 13. 修排序 bug
 
 ```text
 请修 ArticleServiceImpl.getArticleList 的排序 bug。

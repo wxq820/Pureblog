@@ -52,6 +52,10 @@ public enum ErrorCode {
     FILE_TYPE_NOT_SUPPORTED(5002, "不支持的文件类型"),
     FILE_TOO_LARGE(5003, "文件大小超过限制"),
 
+    // 小工具相关 7000-7999
+    WIDGET_NOT_FOUND(7001, "小工具不存在"),
+    WIDGET_CODE_EXISTS(7002, "小工具编码已存在"),
+
     // 系统相关 9000-9999
     INTERNAL_SERVER_ERROR(9001, "服务器内部错误"),
     SERVICE_UNAVAILABLE(9002, "服务暂不可用"),

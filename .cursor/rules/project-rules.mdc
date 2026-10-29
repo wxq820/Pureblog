@@ -1,3 +1,8 @@
+---
+description: "PureBlog 项目硬约束：技术栈选型、代码风格、评审输出预期、文档同步要求"
+alwaysApply: true
+---
+
 # PureBlog 项目规则
 
 ## 范围
@@ -8,16 +13,17 @@
 - 数据库表前缀固定为 `pb_`
 - 第一阶段不拆分微服务
 - 使用 Java 17 + Spring Boot 3 + MyBatis-Plus
-- 使用 Redis 做缓存/计数器；**异步副作用使用 Spring `ApplicationEventPublisher`，不使用 Kafka**；使用 Elasticsearch 做搜索
+- 使用 Redis 做缓存/计数器；**异步副作用使用 Spring `ApplicationEventPublisher`，不使用 Kafka**；搜索使用 MySQL LIKE（当前数据量 < 1000，不引入搜索引擎）
 - 第一阶段不引入 Dubbo，除非明确要求
 - 输出完整的文件，不要只输出片段
 - 保持 Controller 层精简，业务逻辑放在 service/manager
 - 保持 DTO/VO/DO 分离
 - 若数据库结构发生变更，需同步更新 `docs/04_数据库设计.sql` 与 `backend/sql/`
-- **基础设施（MySQL / Redis / Elasticsearch 等）必须通过 `deploy/docker-compose.dev.yml` 启动，禁止本地安装同版本服务**
-  - 启动命令：`cd deploy && docker compose -f docker-compose.dev.yml up -d`
-  - 数据持久化位置：`deploy/data/mysql/`、`deploy/data/redis/`
-  - 应用配置 `application-dev.yml` 已与该 compose 对齐（MySQL 13306→3306、Redis 6379、ES 9200，MySQL 密码 123456）
+- **基础设施（MySQL / Redis / JDK17+Maven 等）必须通过根目录 `docker-compose.yml` 启动，禁止本地安装同版本服务**
+  - 启动命令：`docker compose up -d`（在项目根目录执行）
+  - 一键启动：`scripts\start-all.bat`；一键停止：`scripts\stop-all.bat`
+  - 数据持久化位置：Docker 命名卷 `pureblog-temp_mysql_data` / `pureblog-temp_redis_data`
+  - 应用配置 `application-dev.yml` 已与该 compose 对齐（MySQL 13306→3306、Redis 6379，MySQL 密码 123456）
 
 ## 代码风格
 - 使用清晰的包边界

@@ -1,1 +1,0 @@
-{bcrypt}$2b$10$WKeWSCscf8QxyjjVi6/kJu.4PGS63eWIWbdU2/mvVQOwhB7AkZ8O2

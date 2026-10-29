@@ -5,10 +5,8 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.pureblog.article.dto.*;
 import com.pureblog.article.entity.*;
-import com.pureblog.article.event.ArticleEvent;
 import com.pureblog.article.manager.ArticleCacheManager;
 import com.pureblog.article.mapper.*;
-import com.pureblog.article.producer.ArticleEventProducer;
 import com.pureblog.article.service.ArticleService;
 import com.pureblog.article.vo.*;
 import com.pureblog.article.vo.ArticleDetailVO.*;
@@ -43,7 +41,6 @@ public class ArticleServiceImpl implements ArticleService {
     private final TagMapper tagMapper;
     private final UserMapper userMapper;
     private final ArticleCacheManager cacheManager;
-    private final ArticleEventProducer eventProducer;
     private final TreeService treeService;
 
     @Override
@@ -135,26 +132,6 @@ public class ArticleServiceImpl implements ArticleService {
         if (dto.getIsTop() != null) article.setIsTop(dto.getIsTop());
         articleMapper.updateById(article);
 
-        ArticleContentDO content = contentMapper.selectOne(new LambdaQueryWrapper<ArticleContentDO>()
-                .eq(ArticleContentDO::getArticleId, dto.getId()));
-        List<Long> tagIds = articleTagMapper.selectList(new LambdaQueryWrapper<ArticleTagDO>()
-                .eq(ArticleTagDO::getArticleId, dto.getId()))
-                .stream().map(ArticleTagDO::getTagId).collect(Collectors.toList());
-
-        ArticleEvent event = ArticleEvent.builder()
-                .eventType("PUBLISHED")
-                .articleId(article.getId())
-                .authorId(userId)
-                .title(article.getTitle())
-                .summary(article.getSummary())
-                .content(content != null ? content.getContent() : null)
-                .htmlContent(content != null ? content.getHtmlContent() : null)
-                .categoryId(article.getCategoryId())
-                .tagIds(tagIds)
-                .publishedAt(article.getPublishedAt())
-                .build();
-        eventProducer.sendArticleEvent(event);
-
         cacheManager.evictArticleDetail(dto.getId());
         userMapper.update(null, new LambdaUpdateWrapper<UserDO>()
                 .eq(UserDO::getId, userId).setSql("article_count = article_count + 1"));
@@ -177,13 +154,6 @@ public class ArticleServiceImpl implements ArticleService {
         article.setStatus(ArticleStatus.OFFLINE.getCode());
         articleMapper.updateById(article);
 
-        ArticleEvent event = ArticleEvent.builder()
-                .eventType("OFFLINE")
-                .articleId(articleId)
-                .authorId(userId)
-                .build();
-        eventProducer.sendArticleEvent(event);
-
         cacheManager.evictArticleDetail(articleId);
         log.info("Article offline: id={}", articleId);
     }
@@ -201,13 +171,6 @@ public class ArticleServiceImpl implements ArticleService {
         articleMapper.deleteById(articleId);
         contentMapper.delete(new LambdaQueryWrapper<ArticleContentDO>().eq(ArticleContentDO::getArticleId, articleId));
         articleTagMapper.delete(new LambdaQueryWrapper<ArticleTagDO>().eq(ArticleTagDO::getArticleId, articleId));
-
-        ArticleEvent event = ArticleEvent.builder()
-                .eventType("DELETED")
-                .articleId(articleId)
-                .authorId(userId)
-                .build();
-        eventProducer.sendArticleEvent(event);
 
         cacheManager.evictArticleDetail(articleId);
         userMapper.update(null, new LambdaUpdateWrapper<UserDO>()
@@ -248,7 +211,20 @@ public class ArticleServiceImpl implements ArticleService {
         wrapper.eq(query.getTreeNodeId() != null, ArticleDO::getTreeNodeId, query.getTreeNodeId());
         wrapper.eq(query.getTreeId() != null && query.getTreeNodeId() == null, ArticleDO::getTreeId, query.getTreeId());
         if (StringUtils.isNotBlank(query.getKeyword())) {
-            wrapper.like(ArticleDO::getTitle, query.getKeyword());
+            // 关键词匹配范围与 /api/search 保持一致: 标题 OR 摘要 OR 正文 OR 标签名
+            // 用 apply 而非 like(): MyBatis-Plus 的 like() 不带 ESCAPE 子句,
+            // 用户搜 "100%" 会被当成通配符; 这里显式用 ESCAPE '!' 处理字面量.
+            String kw = StringUtils.escapeLike(query.getKeyword().trim());
+            wrapper.and(w -> w
+                    .apply("pb_article.title LIKE CONCAT('%', {0}, '%') ESCAPE '!'", kw)
+                    .or().apply("pb_article.summary LIKE CONCAT('%', {0}, '%') ESCAPE '!'", kw)
+                    .or().apply("EXISTS (SELECT 1 FROM pb_article_content c "
+                            + "WHERE c.article_id = pb_article.id "
+                            + "AND c.content LIKE CONCAT('%', {0}, '%') ESCAPE '!')", kw)
+                    .or().apply("EXISTS (SELECT 1 FROM pb_article_tag at_k "
+                            + "JOIN pb_tag t_k ON t_k.id = at_k.tag_id AND t_k.deleted = 0 "
+                            + "WHERE at_k.article_id = pb_article.id "
+                            + "AND t_k.name LIKE CONCAT('%', {0}, '%') ESCAPE '!')", kw));
         }
 
         // 排序：置顶优先 → 按 sortBy 指定的字段 → asc/desc
@@ -384,32 +360,6 @@ public class ArticleServiceImpl implements ArticleService {
     @Override
     public void incrementViewCount(Long articleId) {
         cacheManager.incrementPv(articleId);
-    }
-
-    @Override
-    public void rebuildSearchIndex(Long articleId) {
-        ArticleDO article = articleMapper.selectByIdSimple(articleId);
-        if (article == null) return;
-
-        ArticleContentDO content = contentMapper.selectOne(new LambdaQueryWrapper<ArticleContentDO>()
-                .eq(ArticleContentDO::getArticleId, articleId));
-        List<Long> tagIds = articleTagMapper.selectList(new LambdaQueryWrapper<ArticleTagDO>()
-                .eq(ArticleTagDO::getArticleId, articleId))
-                .stream().map(ArticleTagDO::getTagId).collect(Collectors.toList());
-
-        ArticleEvent event = ArticleEvent.builder()
-                .eventType("REBUILD_INDEX")
-                .articleId(article.getId())
-                .authorId(article.getAuthorId())
-                .title(article.getTitle())
-                .summary(article.getSummary())
-                .content(content != null ? content.getContent() : null)
-                .htmlContent(content != null ? content.getHtmlContent() : null)
-                .categoryId(article.getCategoryId())
-                .tagIds(tagIds)
-                .publishedAt(article.getPublishedAt())
-                .build();
-        eventProducer.sendArticleEvent(event);
     }
 
     private void saveContent(Long articleId, String content, String htmlContent) {

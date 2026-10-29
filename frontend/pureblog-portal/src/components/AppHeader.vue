@@ -14,6 +14,7 @@
           <el-tab-pane label="分类管理" name="/admin/category/manage" />
           <el-tab-pane label="标签管理" name="/admin/tag/manage" />
           <el-tab-pane label="目录树" name="/admin/tree/manage" />
+          <el-tab-pane label="小工具管理" name="/admin/widget/manage" />
         </el-tabs>
       </div>
       <div class="flex items-center gap-2">

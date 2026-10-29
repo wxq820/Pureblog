@@ -46,6 +46,4 @@ public interface ArticleService {
     void deleteTag(Long id);
 
     void incrementViewCount(Long articleId);
-
-    void rebuildSearchIndex(Long articleId);
 }

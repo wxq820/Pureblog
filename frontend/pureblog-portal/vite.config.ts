@@ -20,6 +20,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src')
     }
   },
+  optimizeDeps: {
+    // 只预打包 element-plus 主包, 不再预打包 element-plus/es (整个组件库目录)
+    include: ['element-plus']
+  },
   server: {
     host: '127.0.0.1',
     port: 3000,

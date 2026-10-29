@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.pureblog.article.mapper.SearchMapper">
+
+    <!--
+      MySQL LIKE 版全文搜索。
+
+      关键词匹配范围: 标题 / 摘要 / 正文 / 标签名。
+      分页用显式 LIMIT/OFFSET, 不依赖 MyBatis-Plus 的 PaginationInnerInterceptor
+      (本项目未注册该拦截器, selectPage 实际不生效)。
+
+      LIKE 通配符处理: Service 层把 ! % _ 转义为 !! !% !_, SQL 侧用 ESCAPE '!' 还原。
+      ESCAPE 用 '!' 而非默认的 '\', 避免 XML 与 Java 双重转义。
+    -->
+
+    <sql id="searchCondition">
+        <if test="keyword != null and keyword != ''">
+            AND (
+                a.title LIKE CONCAT('%', #{keyword}, '%') ESCAPE '!'
+                OR a.summary LIKE CONCAT('%', #{keyword}, '%') ESCAPE '!'
+                OR c.content LIKE CONCAT('%', #{keyword}, '%') ESCAPE '!'
+                OR EXISTS (
+                    SELECT 1 FROM pb_article_tag at_k
+                    JOIN pb_tag t_k ON t_k.id = at_k.tag_id AND t_k.deleted = 0
+                    WHERE at_k.article_id = a.id
+                      AND t_k.name LIKE CONCAT('%', #{keyword}, '%') ESCAPE '!'
+                )
+            )
+        </if>
+        <if test="categoryId != null">
+            AND a.category_id = #{categoryId}
+        </if>
+        <if test="tagId != null">
+            AND EXISTS (
+                SELECT 1 FROM pb_article_tag at_f
+                WHERE at_f.article_id = a.id AND at_f.tag_id = #{tagId}
+            )
+        </if>
+    </sql>
+
+    <select id="search" resultType="com.pureblog.article.mapper.SearchRow">
+        SELECT
+            a.id                AS articleId,
+            a.title             AS title,
+            a.summary           AS summary,
+            c.content           AS content,
+            a.author_id         AS authorId,
+            u.nickname          AS authorName,
+            u.avatar_url        AS authorAvatar,
+            cat.name            AS categoryName,
+            (
+                SELECT GROUP_CONCAT(t.name ORDER BY t.id SEPARATOR ',')
+                FROM pb_article_tag at
+                JOIN pb_tag t ON t.id = at.tag_id AND t.deleted = 0
+                WHERE at.article_id = a.id
+            )                    AS tagNames,
+            a.view_count        AS viewCount,
+            a.like_count        AS likeCount,
+            a.published_at      AS publishedAt
+        FROM pb_article a
+        LEFT JOIN pb_article_content c ON c.article_id = a.id
+        LEFT JOIN pb_user u            ON u.id = a.author_id AND u.deleted = 0
+        LEFT JOIN pb_category cat      ON cat.id = a.category_id AND cat.deleted = 0
+        <where>
+            a.status = 1
+            AND a.deleted = 0
+            <include refid="searchCondition"/>
+        </where>
+        <choose>
+            <when test="sortBy == 'viewCount'">
+                ORDER BY a.view_count <if test="sortOrder == 'asc'">ASC</if><if test="sortOrder != 'asc'">DESC</if>
+            </when>
+            <when test="sortBy == 'likeCount'">
+                ORDER BY a.like_count <if test="sortOrder == 'asc'">ASC</if><if test="sortOrder != 'asc'">DESC</if>
+            </when>
+            <when test="sortBy == 'publishedAt'">
+                ORDER BY a.published_at <if test="sortOrder == 'asc'">ASC</if><if test="sortOrder != 'asc'">DESC</if>
+            </when>
+            <otherwise>
+                <!-- relevance: 标题命中优先, 其次按发布时间倒序; 无关键词时只按发布时间 -->
+                <choose>
+                    <when test="keyword != null and keyword != ''">
+                        ORDER BY (CASE WHEN a.title LIKE CONCAT('%', #{keyword}, '%') ESCAPE '!' THEN 0 ELSE 1 END) ASC,
+                                 a.published_at DESC
+                    </when>
+                    <otherwise>
+                        ORDER BY a.published_at DESC
+                    </otherwise>
+                </choose>
+            </otherwise>
+        </choose>
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM pb_article a
+        LEFT JOIN pb_article_content c ON c.article_id = a.id
+        <where>
+            a.status = 1
+            AND a.deleted = 0
+            <include refid="searchCondition"/>
+        </where>
+    </select>
+
+</mapper>

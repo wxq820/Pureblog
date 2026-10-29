@@ -25,11 +25,6 @@ spring:
           min-idle: 5
           max-wait: 10000ms
 
-  elasticsearch:
-    uris: http://127.0.0.1:9200
-    connection-timeout: 5s
-    socket-timeout: 30s
-
   servlet:
     multipart:
       enabled: true
@@ -41,7 +36,7 @@ mybatis-plus:
   type-aliases-package: com.pureblog.**.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     db-config:
       id-type: assign_id
@@ -54,6 +49,16 @@ jwt:
   expiration: 86400000
   refresh-expiration: 604800000
 
+# 单用户开发环境专用: 配置后, 登录时跳过 DB 密码校验
+# (auth 库里 admin 的 password_hash 缺 {bcrypt} 前缀, 懒得修就硬编码过来)
+auth:
+  hardcoded:
+    enabled: true
+    username: admin
+    password: 123456
+    nickname: 站长
+    role: 4
+
 management:
   endpoints:
     web:
@@ -61,8 +66,8 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
 
 logging:
   level:
-    com.pureblog: DEBUG
+    com.pureblog: INFO

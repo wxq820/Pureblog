@@ -10,7 +10,9 @@ import com.pureblog.stats.vo.ArticleRankVO;
 import com.pureblog.stats.vo.DashboardVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -144,7 +146,15 @@ public class StatsServiceImpl implements StatsService {
                 .build()).collect(Collectors.toList());
     }
 
-    @Scheduled(fixedRate = 300000)
+    /**
+     * 每 5 分钟从 MySQL 全量刷新热度 ZSet 兜底.
+     *
+     * <p>initialDelay = 60s: fixedRate 任务在应用启动后会立即执行第一次, 全表扫
+     * pb_article 再逐条写 Redis 会拖慢启动收尾阶段; 延迟 1 分钟让启动先跑完。
+     *
+     * <p>逐条 add 改为 pipeline: N 篇文章 = N 次网络往返, pipeline 后合并为 1 次。
+     */
+    @Scheduled(fixedRate = 300000, initialDelay = 60000)
     @Override
     public void refreshHotArticles() {
         log.info("Refreshing hot articles score from database...");
@@ -154,10 +164,21 @@ public class StatsServiceImpl implements StatsService {
 
         redisTemplate.delete(HOT_ZSET_KEY);
 
-        for (ArticleDO article : articles) {
-            int score = article.getViewCount() + article.getLikeCount() * 10 + article.getCommentCount() * 5;
-            redisTemplate.opsForZSet().add(HOT_ZSET_KEY, String.valueOf(article.getId()), score);
-        }
+        // pipeline 批量写入, 避免逐条 add 的网络往返
+        // 用匿名类而非 lambda: SessionCallback.execute 是泛型方法, lambda 无法实现
+        redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <K, V> Object execute(RedisOperations<K, V> operations) {
+                RedisOperations<String, Object> ops = (RedisOperations<String, Object>) operations;
+                for (ArticleDO article : articles) {
+                    int score = article.getViewCount() + article.getLikeCount() * LIKE_HOT_WEIGHT
+                            + article.getCommentCount() * 5;
+                    ops.opsForZSet().add(HOT_ZSET_KEY, String.valueOf(article.getId()), score);
+                }
+                return null;
+            }
+        });
 
         redisTemplate.expire(HOT_ZSET_KEY, 7, TimeUnit.DAYS);
         log.info("Hot articles refreshed: total={}", articles.size());

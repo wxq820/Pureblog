@@ -1,3 +1,8 @@
+---
+description: "前端实现规则：Vue3 技术栈、目录与 API 封装、UI 优先级、Header 与滚动布局一致性约束"
+alwaysApply: true
+---
+
 # 前端实现规则
 
 ## 技术栈

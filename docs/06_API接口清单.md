@@ -204,10 +204,7 @@
 - 需登录，且为作者本人
 
 ### 4.6 触发单个文章索引重建
-- `POST /api/article/rebuild-index/{id}`
-- 需登录
-
-> 当前 `ArticleServiceImpl.rebuildSearchIndex` 已被声明，但路由未在 `ArticleController` 暴露。可以通过调用 `ArticleEventProducer.sendArticleEvent(REBUILD_INDEX)` 实现单条重建。
+- **已下线** —— 搜索改用 MySQL `LIKE` 后不再需要索引重建，该接口随 `ArticleService.rebuildSearchIndex` 一并移除。
 
 ---
 
@@ -252,17 +249,45 @@
 
 ### 6.1 全文搜索
 - `GET /api/search?keyword=&categoryId=&tagId=&sortBy=&sortOrder=&page=1&size=10`
+  - `keyword`: 匹配范围为 标题 OR 摘要 OR 正文 OR 标签名
   - `sortBy`: `relevance` | `viewCount` | `likeCount` | `publishedAt`
   - `sortOrder`: `asc` | `desc`
 - 公开
 
-### 6.2 创建索引
-- `POST /api/search/index/create`
-- 公开（生产环境应加管理员校验）
+**响应结构**（`data` 字段）：
 
-### 6.3 全量重建索引
-- `POST /api/search/index/rebuild`
-- 公开（生产环境应加管理员校验）
+```json
+{
+  "articles": [
+    {
+      "articleId": 1,
+      "title": "标题中带 <em>高亮</em> 的标题",
+      "summary": "文章摘要（原文，不转义）",
+      "authorName": "作者昵称",
+      "authorAvatar": null,
+      "authorId": 1,
+      "categoryName": "技术",
+      "tagNames": ["Java", "Redis"],
+      "viewCount": 100,
+      "likeCount": 10,
+      "publishedAt": "2026-10-28 10:00:00",
+      "highlights": ["正文命中片段，带 <em>高亮</em>"]
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 10,
+  "totalPages": 1,
+  "tookMs": 12
+}
+```
+
+> `title` 与 `highlights` 由服务端做 HTML 转义后插入 `<em>` 标签（前端用 `v-html` 渲染）；
+> `summary` 不转义（前端用 `{{ }}` 插值渲染，转义会导致双重转义显示成 `&amp;lt;`）。
+
+### 6.2 索引管理
+- **已下线** —— `POST /api/search/index/create` 与 `POST /api/search/index/rebuild` 随索引方案一起移除。
+  搜索走 MySQL `LIKE`，无索引需要创建或重建。
 
 ---
 
@@ -378,21 +403,74 @@
 - `DELETE /api/admin/tag/{id}`
 - 需管理员
 
+### 9.17 小工具管理
+- `GET /api/admin/widget/list` —— 列出全部小工具（含禁用）
+- `POST /api/admin/widget/create` —— Body：`{code, name, description?, icon?, iconColor?, path, sortOrder?, status?}`
+- `PUT /api/admin/widget/update` —— Body：`{id, name?, description?, icon?, iconColor?, path?, sortOrder?, status?}`
+- `POST /api/admin/widget/status/{id}?status=1|0`
+- `DELETE /api/admin/widget/{id}`
+- 需管理员
+- `icon` 为 Element Plus Icons 图标名（如 `EditPen` / `Wallet`），取值见 `frontend/pureblog-portal/src/constants/widgetIcons.ts`
+
 ---
 
-## 10. 公共
+## 10. 小工具模块
 
-### 10.1 健康检查
+> 小工具是个人使用场景，**全部接口均需登录**（未登录返回 401）。
+> 前端首页仅在登录后渲染「小工具」卡片，`/widget/:code` 路由也走 `requiresAuth` 守卫。
+
+### 10.1 小工具入口
+- `GET /api/widget/list` —— 列出所有启用的小工具（按 `click_count` 降序）
+- `POST /api/widget/click` —— Body：`{widgetId, deviceId}`，记 1 次点击（按设备+日去重）
+- 需登录
+
+### 10.2 记账（/api/ledger）
+- `GET /api/ledger/dict?type=1|2` —— `type=1` 平台字典，`type=2` 项目字典
+- `POST /api/ledger/dict` —— Body：`{type, name, color?, icon?}`
+- `GET /api/ledger/record?deviceId=&limit=100` —— 按设备查最近记录
+- `POST /api/ledger/record` —— Body：`{recordDate, platformDictId, itemDictId?, itemText?, amount, deviceId}`
+- 需登录
+- 备注：记账数据目前按 `deviceId`（前端 localStorage 匿名 ID）隔离，登录只是访问门槛
+
+### 10.3 身家（/api/widget/networth）
+- `GET /api/widget/networth/dashboard`
+- `GET /api/widget/networth/snapshot/list`
+- `GET /api/widget/networth/snapshot/{id}/entries`
+- `POST /api/widget/networth/snapshot/save`
+- `DELETE /api/widget/networth/snapshot/{id}`
+- 需登录
+
+### 10.4 回本之路（/api/widget/recovery）
+- `GET /api/widget/recovery/dashboard`
+- `POST /api/widget/recovery/position/save`
+- `POST /api/widget/recovery/value/save`
+- `DELETE /api/widget/recovery/position/{id}`
+- 需登录
+
+### 10.5 投资表（/api/widget/fund）
+- `GET /api/widget/fund/dashboard`
+- `POST /api/widget/fund/save`
+- `POST /api/widget/fund/buy/save`
+- `POST /api/widget/fund/nav/save`
+- `DELETE /api/widget/fund/buy/{id}`
+- `DELETE /api/widget/fund/{id}`
+- 需登录
+
+---
+
+## 11. 公共
+
+### 11.1 健康检查
 - `GET /actuator/health`
 - 公开
 
-### 10.2 应用信息
+### 11.2 应用信息
 - `GET /actuator/info`
 - 公开
 
 ---
 
-## 11. 接口开发约束
+## 12. 接口开发约束
 
 - 所有写接口必须 `@Valid` 校验
 - 列表接口统一分页（`page` 从 1 起）

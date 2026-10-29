@@ -1,393 +1,642 @@
 -- ============================================================
--- PureBlog 数据库设计
--- MySQL 8.0
--- 字符集：utf8mb4
+-- PureBlog 数据库设计说明
+-- MySQL 8.0 / 字符集 utf8mb4 / 排序规则 utf8mb4_unicode_ci
 -- ============================================================
--- 说明：
--- 1. 本脚本为当前代码使用的权威建表脚本，与实际 entity 一一对应
--- 2. 字符集 utf8mb4_unicode_ci
--- 3. 主键统一为 BIGINT UNSIGNED，自增
--- 4. 软删除字段统一为 deleted (TINYINT, 0=未删, 1=已删)
--- 5. 时间字段：created_at, updated_at, deleted_at (按需)
--- 6. 文章元数据与正文拆表
--- 7. 搜索依赖 Elasticsearch，不在 MySQL 上做全文索引
--- 8. 用户密码采用 BCrypt 加密
--- 9. 目录树相关表与字段（pb_tree / pb_tree_node / pb_article.tree_id / pb_article.tree_node_id）由 `backend/sql/init_tree.sql` 维护（幂等 ALTER）。已上线库只需 source 一次该脚本；新库可把下文第 16~18 节直接合并到本文件
--- ============================================================
-
-CREATE DATABASE IF NOT EXISTS pureblog DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE pureblog;
-
-SET NAMES utf8mb4;
-
--- -------------------------------------------------------
--- 1. pb_user 用户表
---    角色：1-普通用户 2-作者 3-管理员 4-超管
---    状态：1-正常 2-禁用
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_user;
-CREATE TABLE pb_user (
-    id              BIGINT UNSIGNED     NOT NULL AUTO_INCREMENT              COMMENT '用户ID',
-    username        VARCHAR(50)         NOT NULL                              COMMENT '用户名',
-    email           VARCHAR(255)        NOT NULL                              COMMENT '邮箱',
-    password_hash   VARCHAR(255)        NOT NULL                              COMMENT '密码哈希(BCrypt)',
-    nickname        VARCHAR(100)        DEFAULT NULL                          COMMENT '昵称',
-    avatar_url      VARCHAR(500)        DEFAULT NULL                          COMMENT '头像URL',
-    bio             VARCHAR(500)        DEFAULT NULL                          COMMENT '个人简介',
-    role            TINYINT UNSIGNED    NOT NULL DEFAULT 1                   COMMENT '角色: 1-普通用户 2-作者 3-管理员 4-超管',
-    status          TINYINT UNSIGNED    NOT NULL DEFAULT 1                   COMMENT '状态: 1-正常 2-禁用',
-    follower_count  INT UNSIGNED        NOT NULL DEFAULT 0                    COMMENT '粉丝数',
-    following_count INT UNSIGNED        NOT NULL DEFAULT 0                    COMMENT '关注数',
-    article_count   INT UNSIGNED        NOT NULL DEFAULT 0                    COMMENT '文章数',
-    last_login_at   DATETIME            DEFAULT NULL                          COMMENT '最后登录时间',
-    created_at      DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at      DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted         TINYINT UNSIGNED    NOT NULL DEFAULT 0                    COMMENT '软删除: 0-否 1-是',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_username (username),
-    UNIQUE KEY uk_email (email)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户表';
-
--- -------------------------------------------------------
--- 2. pb_category 分类表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_category;
-CREATE TABLE pb_category (
-    id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT               COMMENT '分类ID',
-    name         VARCHAR(50)      NOT NULL                              COMMENT '分类名称',
-    slug         VARCHAR(50)      NOT NULL                              COMMENT '分类别名',
-    description  VARCHAR(255)     DEFAULT NULL                          COMMENT '分类描述',
-    sort_order   INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '排序',
-    article_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '文章数',
-    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP     COMMENT '创建时间',
-    updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted      TINYINT UNSIGNED  NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_slug (slug)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='分类表';
-
--- -------------------------------------------------------
--- 3. pb_tag 标签表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_tag;
-CREATE TABLE pb_tag (
-    id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT               COMMENT '标签ID',
-    name          VARCHAR(50)      NOT NULL                              COMMENT '标签名称',
-    slug          VARCHAR(50)      NOT NULL                              COMMENT '标签别名',
-    article_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '文章数',
-    created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP     COMMENT '创建时间',
-    updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted       TINYINT UNSIGNED  NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_name (name),
-    UNIQUE KEY uk_slug (slug)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='标签表';
-
--- -------------------------------------------------------
--- 4. pb_article 文章元数据表
---    status: 0-草稿 1-已发布 2-已下架
---    tree_id / tree_node_id：目录树挂载字段（首次部署后由 init_tree.sql 追加）
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_article;
-CREATE TABLE pb_article (
-    id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT '文章ID',
-    author_id     BIGINT UNSIGNED  NOT NULL                              COMMENT '作者ID',
-    category_id   BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '分类ID',
-    tree_id       BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '目录树主表ID（init_tree.sql 追加）',
-    tree_node_id  BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '目录树叶子节点ID（init_tree.sql 追加）',
-    title         VARCHAR(255)     NOT NULL                              COMMENT '文章标题',
-    summary       VARCHAR(500)     DEFAULT NULL                          COMMENT '文章摘要',
-    cover_url     VARCHAR(500)     DEFAULT NULL                          COMMENT '封面图URL',
-    status        TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '状态: 0-草稿 1-已发布 2-已下架',
-    view_count    INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '浏览量',
-    like_count    INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '点赞数',
-    comment_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '评论数',
-    collect_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '收藏数',
-    is_featured   TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '是否精选',
-    is_top        TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '是否置顶',
-    published_at  DATETIME         DEFAULT NULL                          COMMENT '发布时间',
-    created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    KEY idx_author_id (author_id),
-    KEY idx_category_id (category_id),
-    KEY idx_status (status),
-    KEY idx_published_at (published_at),
-    KEY idx_is_featured (is_featured),
-    KEY idx_is_top (is_top),
-    KEY idx_tree_id (tree_id),
-    KEY idx_tree_node_id (tree_node_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章元数据表';
-
--- -------------------------------------------------------
--- 5. pb_article_content 文章正文表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_article_content;
-CREATE TABLE pb_article_content (
-    id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT '内容ID',
-    article_id   BIGINT UNSIGNED  NOT NULL                              COMMENT '文章ID',
-    content      LONGTEXT         NOT NULL                              COMMENT 'Markdown正文',
-    html_content LONGTEXT         DEFAULT NULL                          COMMENT '渲染后HTML',
-    word_count   INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '字数',
-    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_article_id (article_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章正文表';
-
--- -------------------------------------------------------
--- 6. pb_article_tag 文章-标签关联表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_article_tag;
-CREATE TABLE pb_article_tag (
-    id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    article_id BIGINT UNSIGNED  NOT NULL                              COMMENT '文章ID',
-    tag_id     BIGINT UNSIGNED  NOT NULL                              COMMENT '标签ID',
-    created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_article_tag (article_id, tag_id),
-    KEY idx_tag_id (tag_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章标签关联表';
-
--- -------------------------------------------------------
--- 7. pb_comment 评论表
---    status: 0-待审核 1-通过 2-拒绝
---    说明：当前代码实现中 createComment 直接置 APPROVED，默认为通过
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_comment;
-CREATE TABLE pb_comment (
-    id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT '评论ID',
-    article_id   BIGINT UNSIGNED  NOT NULL                              COMMENT '文章ID',
-    user_id      BIGINT UNSIGNED  NOT NULL                              COMMENT '评论用户ID',
-    parent_id    BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '父评论ID(0/null表示顶级)',
-    reply_to_id  BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '回复目标评论ID',
-    reply_to_uid BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '回复目标用户ID',
-    content      VARCHAR(1000)    NOT NULL                              COMMENT '评论内容',
-    like_count   INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '点赞数',
-    status       TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '状态: 0-待审核 1-通过 2-拒绝',
-    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    KEY idx_article_id (article_id),
-    KEY idx_user_id (user_id),
-    KEY idx_parent_id (parent_id),
-    KEY idx_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='评论表';
-
--- -------------------------------------------------------
--- 8. pb_follow 关注关系表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_follow;
-CREATE TABLE pb_follow (
-    id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    follower_id BIGINT UNSIGNED  NOT NULL                              COMMENT '粉丝ID',
-    following_id BIGINT UNSIGNED NOT NULL                              COMMENT '关注用户ID',
-    created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_follow (follower_id, following_id),
-    KEY idx_following_id (following_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关注关系表';
-
--- -------------------------------------------------------
--- 9. pb_collect 收藏表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_collect;
-CREATE TABLE pb_collect (
-    id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    user_id    BIGINT UNSIGNED  NOT NULL                              COMMENT '用户ID',
-    article_id BIGINT UNSIGNED  NOT NULL                              COMMENT '文章ID',
-    created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '收藏时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_collect (user_id, article_id),
-    KEY idx_article_id (article_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='收藏表';
-
--- -------------------------------------------------------
--- 10. pb_like 点赞表（文章/评论点赞共用）
---     target_type: 1-文章 2-评论
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_like;
-CREATE TABLE pb_like (
-    id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    user_id     BIGINT UNSIGNED  NOT NULL                              COMMENT '用户ID',
-    target_id   BIGINT UNSIGNED  NOT NULL                              COMMENT '目标ID',
-    target_type TINYINT UNSIGNED NOT NULL                              COMMENT '类型: 1-文章 2-评论',
-    created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '点赞时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_like (user_id, target_id, target_type),
-    KEY idx_target (target_id, target_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='点赞表';
-
--- -------------------------------------------------------
--- 11. pb_notification 通知表
---     type: 1-评论 2-回复 3-关注 4-点赞 5-收藏 6-系统通知
---     is_read: 0-未读 1-已读
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_notification;
-CREATE TABLE pb_notification (
-    id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT '通知ID',
-    user_id      BIGINT UNSIGNED  NOT NULL                              COMMENT '接收用户ID',
-    type         TINYINT UNSIGNED NOT NULL                              COMMENT '类型: 1-评论 2-回复 3-关注 4-点赞 5-收藏 6-系统通知',
-    title        VARCHAR(255)     DEFAULT NULL                          COMMENT '通知标题',
-    content      VARCHAR(1000)    DEFAULT NULL                          COMMENT '通知内容',
-    related_id   BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '关联ID(文章ID/评论ID等)',
-    related_type TINYINT UNSIGNED DEFAULT NULL                          COMMENT '关联类型',
-    is_read      TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '是否已读: 0-否 1-是',
-    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    PRIMARY KEY (id),
-    KEY idx_user_id (user_id),
-    KEY idx_is_read (is_read),
-    KEY idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通知表';
-
--- -------------------------------------------------------
--- 12. pb_login_log 登录日志表
---     status: 1-成功 2-失败
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_login_log;
-CREATE TABLE pb_login_log (
-    id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    user_id    BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '用户ID',
-    username   VARCHAR(50)      DEFAULT NULL                          COMMENT '用户名',
-    ip         VARCHAR(50)      DEFAULT NULL                          COMMENT '登录IP',
-    user_agent VARCHAR(500)     DEFAULT NULL                          COMMENT 'User-Agent',
-    status     TINYINT UNSIGNED NOT NULL DEFAULT 1                    COMMENT '状态: 1-成功 2-失败',
-    msg        VARCHAR(255)     DEFAULT NULL                          COMMENT '备注信息',
-    created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '登录时间',
-    PRIMARY KEY (id),
-    KEY idx_user_id (user_id),
-    KEY idx_created_at (created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='登录日志表';
-
--- -------------------------------------------------------
--- 13. pb_article_stats 文章日统计表（保留给定时聚合使用）
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_article_stats;
-CREATE TABLE pb_article_stats (
-    id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    article_id BIGINT UNSIGNED  NOT NULL                              COMMENT '文章ID',
-    pv         INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '页面浏览量',
-    uv         INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '独立访客数',
-    date       DATE             NOT NULL                              COMMENT '统计日期',
-    created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_article_date (article_id, date),
-    KEY idx_date (date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文章日统计表';
-
--- -------------------------------------------------------
--- 14. pb_file 文件表（尚未在 Java 代码中启用）
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_file;
-CREATE TABLE pb_file (
-    id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    uploader_id BIGINT UNSIGNED  NOT NULL                              COMMENT '上传者ID',
-    file_name   VARCHAR(255)     NOT NULL                              COMMENT '文件名',
-    file_key    VARCHAR(255)     NOT NULL                              COMMENT 'MinIO存储Key',
-    file_url    VARCHAR(500)     NOT NULL                              COMMENT '访问URL',
-    file_size   BIGINT UNSIGNED  NOT NULL                              COMMENT '文件大小(字节)',
-    mime_type   VARCHAR(100)     DEFAULT NULL                          COMMENT 'MIME类型',
-    file_type   TINYINT UNSIGNED NOT NULL                              COMMENT '文件类型: 1-图片 2-视频 3-文档 4-其他',
-    bucket      VARCHAR(50)      DEFAULT NULL                          COMMENT '存储桶',
-    created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '上传时间',
-    PRIMARY KEY (id),
-    KEY idx_uploader_id (uploader_id),
-    KEY idx_file_type (file_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件表';
-
--- -------------------------------------------------------
--- 15. pb_system_config 系统配置表
--- -------------------------------------------------------
-DROP TABLE IF EXISTS pb_system_config;
-CREATE TABLE pb_system_config (
-    id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT              COMMENT 'ID',
-    config_key  VARCHAR(100)     NOT NULL                              COMMENT '配置键',
-    config_value TEXT            DEFAULT NULL                          COMMENT '配置值',
-    description VARCHAR(255)     DEFAULT NULL                          COMMENT '描述',
-    created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_config_key (config_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='系统配置表';
-
--- ============================================================
--- 初始数据
+-- 【本文件定位】数据库设计说明文档，不是可执行建表脚本。
+--   本文件回答「有哪些表、每张表干什么用、字段含义、表间关系」。
+--   建库与初始化数据的唯一入口是：
+--     1) scripts/schema.sql              —— 31 张表全量建库 + 初始数据（新建库首选）
+--     2) backend/sql/init_tree.sql       —— 目录树表 + pb_article 挂载字段（已上线库的幂等 ALTER 版）
+--     3) backend/sql/init_widget.sql     —— 小工具 / 记账模块表（幂等版）
+--     4) backend/sql/init_finance.sql    —— 身家 / 回本之路 / 投资模块表（幂等版）
+--   修改表结构时，两处必须同时更新：本文件（设计说明）与 scripts/schema.sql（建库真相源）。
+--
+-- 【设计约定】
+-- 1. 主键统一 BIGINT UNSIGNED，核心博客表用 AUTO_INCREMENT；小工具 / 财务模块表用应用层雪花 ID
+-- 2. 软删除字段统一为 deleted（TINYINT，0=未删，1=已删）；日志 / 流水类表不使用软删除
+-- 3. 时间字段：created_at、updated_at（按需）；updated_at 随 UPDATE 自动刷新
+-- 4. 文章元数据与正文拆表：pb_article 只存元数据与计数，正文在 pb_article_content
+-- 5. 搜索直接 JOIN pb_article / pb_article_content / pb_article_tag / pb_tag，不建独立索引表
+-- 6. 用户密码采用 BCrypt 加密
+-- 7. 目录树挂载字段（pb_article.tree_id / tree_node_id）随 pb_tree / pb_tree_node 一起维护
+--
+-- 【ID 生成策略】
+--   核心博客表（pb_user ~ pb_login_log、pb_article_stats、pb_file、pb_system_config）
+--     id BIGINT UNSIGNED AUTO_INCREMENT —— 由 MySQL 生成
+--   小工具 / 财务模块表（pb_widget ~ pb_fund_nav）
+--     id BIGINT NOT NULL —— 由应用层 MyBatis-Plus IdType.ASSIGN_ID 生成雪花 ID
+--   原因：这两类模块的数据由独立的前端小工具写入，需要在插入前就拿到 ID
+--         以便在同一事务里写入关联行（如快照头 + 快照明细），故不依赖数据库自增。
+--
+-- 【表分组】（共 31 张）
+--   A. 核心博客（16 张）  pb_user, pb_category, pb_tag, pb_article, pb_article_content,
+--                        pb_article_tag, pb_comment, pb_follow, pb_collect, pb_like,
+--                        pb_notification, pb_login_log, pb_kafka_outbox, pb_article_stats,
+--                        pb_file, pb_system_config
+--   B. 目录树（2 张）      pb_tree, pb_tree_node
+--   C. 小工具（4 张）      pb_widget, pb_widget_click, pb_ledger_dict, pb_ledger_record
+--   D. 财务（9 张）        pb_account_category, pb_account, pb_balance_snapshot, pb_balance_entry,
+--                        pb_position, pb_position_value, pb_fund, pb_fund_buy, pb_fund_nav
 -- ============================================================
 
--- 插入超管账户 (密码: admin123, BCrypt 加密)
-INSERT INTO pb_user (username, email, password_hash, nickname, role, status) VALUES
-('admin', 'admin@pureblog.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '管理员', 4, 1);
-
--- 插入默认分类
-INSERT INTO pb_category (name, slug, description, sort_order) VALUES
-('技术', 'tech', '技术相关文章', 1),
-('生活', 'life', '生活随笔', 2),
-('读书', 'reading', '读书笔记', 3),
-('随想', 'thoughts', '随想杂谈', 4);
-
--- 插入默认标签
-INSERT INTO pb_tag (name, slug) VALUES
-('Java', 'java'),
-('Spring Boot', 'spring-boot'),
-('Redis', 'redis'),
-('MySQL', 'mysql'),
-('Elasticsearch', 'elasticsearch'),
-('Kafka', 'kafka'),
-('Docker', 'docker'),
-('Vue', 'vue'),
-('架构设计', 'architecture'),
-('性能优化', 'performance');
-
--- 插入默认系统配置
-INSERT INTO pb_system_config (config_key, config_value, description) VALUES
-('site_name', 'PureBlog', '网站名称'),
-('site_description', '纯粹的技术博客平台', '网站描述'),
-('article_per_page', '10', '每页文章数'),
-('hot_article_days', '7', '热榜统计天数'),
-('comment_need_audit', 'true', '评论是否需要审核'),
-('upload_max_size', '10485760', '文件上传大小限制(字节)');
 
 -- ============================================================
--- 16. pb_tree 目录树主表（首次部署可直接执行；已上线库改用 backend/sql/init_tree.sql 的幂等 ALTER）
+-- A. 核心博客模块
 -- ============================================================
-DROP TABLE IF EXISTS pb_tree;
-CREATE TABLE pb_tree (
-    id           BIGINT UNSIGNED  NOT NULL                              COMMENT '主表ID',
-    code         VARCHAR(64)      NOT NULL                              COMMENT '唯一编码（如 java / frontend）',
-    name         VARCHAR(64)      NOT NULL                              COMMENT '名称',
-    description  VARCHAR(255)     DEFAULT NULL                          COMMENT '描述',
-    cover_color  VARCHAR(16)      DEFAULT '#2563eb'                     COMMENT '主色',
-    sort_order   INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '排序',
-    status       TINYINT UNSIGNED NOT NULL DEFAULT 1                    COMMENT '1-启用 0-禁用',
-    created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    UNIQUE KEY uk_pb_tree_code (code),
-    KEY idx_pb_tree_status (status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目录树主表';
+
+-- -------------------------------------------------------
+-- A1. pb_user 用户表
+--     用途：账号、资料、粉丝 / 关注 / 文章计数
+--     角色：1-普通用户 2-作者 3-管理员 4-超管
+--     状态：1-正常 2-禁用
+--     关联：被 pb_article.author_id、pb_comment.user_id、pb_follow、pb_collect、pb_like 等引用
+-- -------------------------------------------------------
+-- 字段：
+--   id              BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   用户ID（主键）
+--   username        VARCHAR(50)      NOT NULL                   用户名（唯一）
+--   email           VARCHAR(255)     NOT NULL                   邮箱（唯一）
+--   password_hash   VARCHAR(255)     NOT NULL                   密码哈希（BCrypt，带 {bcrypt} 前缀）
+--   nickname        VARCHAR(100)     DEFAULT NULL               昵称
+--   avatar_url      VARCHAR(500)     DEFAULT NULL               头像URL
+--   bio             VARCHAR(500)     DEFAULT NULL               个人简介
+--   role            TINYINT UNSIGNED NOT NULL DEFAULT 1         角色：1-普通用户 2-作者 3-管理员 4-超管
+--   status          TINYINT UNSIGNED NOT NULL DEFAULT 1         状态：1-正常 2-禁用
+--   follower_count  INT UNSIGNED     NOT NULL DEFAULT 0         粉丝数（冗余计数）
+--   following_count INT UNSIGNED     NOT NULL DEFAULT 0         关注数（冗余计数）
+--   article_count   INT UNSIGNED     NOT NULL DEFAULT 0         文章数（冗余计数）
+--   last_login_at   DATETIME         DEFAULT NULL               最后登录时间
+--   created_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted         TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除：0-否 1-是
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_username(username)；UNIQUE uk_email(email)
+-- 注意事项：粉丝 / 关注 / 文章数均为冗余字段，写操作需同步维护；鉴权取 userId 走 LoginUserHolder
+
+-- -------------------------------------------------------
+-- A2. pb_category 分类表
+--     用途：文章分类（与标签的多对多不同，分类是单选）
+--     关联：pb_article.category_id
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   分类ID（主键）
+--   name         VARCHAR(50)      NOT NULL                   分类名称（唯一）
+--   slug         VARCHAR(50)      NOT NULL                   分类别名（唯一，URL 用）
+--   description  VARCHAR(255)     DEFAULT NULL               分类描述
+--   sort_order   INT UNSIGNED     NOT NULL DEFAULT 0         排序
+--   article_count INT UNSIGNED    NOT NULL DEFAULT 0         文章数（冗余计数）
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_slug(slug)；UNIQUE uk_name(name)
+
+-- -------------------------------------------------------
+-- A3. pb_tag 标签表
+--     用途：文章标签（多对多，通过 pb_article_tag 关联）
+--     关联：pb_article_tag.tag_id
+-- -------------------------------------------------------
+-- 字段：
+--   id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   标签ID（主键）
+--   name          VARCHAR(50)      NOT NULL                   标签名称（唯一）
+--   slug          VARCHAR(50)      NOT NULL                   标签别名（唯一）
+--   article_count INT UNSIGNED     NOT NULL DEFAULT 0         文章数（冗余计数）
+--   created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_name(name)；UNIQUE uk_slug(slug)
+-- 注意事项：搜索时标签名参与匹配，故需与 pb_article_tag 保持一致
+
+-- -------------------------------------------------------
+-- A4. pb_article 文章元数据表
+--     用途：文章标题、状态、计数、目录树挂载
+--     status：0-草稿 1-已发布 2-已下架
+--     关联：被 pb_article_content / pb_article_tag / pb_comment / pb_collect / pb_like / pb_article_stats 引用
+-- -------------------------------------------------------
+-- 字段：
+--   id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   文章ID（主键）
+--   author_id     BIGINT UNSIGNED  NOT NULL                   作者ID
+--   category_id   BIGINT UNSIGNED  DEFAULT NULL               分类ID
+--   tree_id       BIGINT UNSIGNED  DEFAULT NULL               目录树主表ID
+--   tree_node_id  BIGINT UNSIGNED  DEFAULT NULL               目录树叶子节点ID
+--   title         VARCHAR(255)     NOT NULL                   文章标题
+--   summary       VARCHAR(500)     DEFAULT NULL               文章摘要
+--   cover_url     VARCHAR(500)     DEFAULT NULL               封面图URL
+--   status        TINYINT UNSIGNED NOT NULL DEFAULT 0         状态：0-草稿 1-已发布 2-已下架
+--   view_count    INT UNSIGNED     NOT NULL DEFAULT 0         浏览量
+--   like_count    INT UNSIGNED     NOT NULL DEFAULT 0         点赞数
+--   comment_count INT UNSIGNED     NOT NULL DEFAULT 0         评论数
+--   collect_count INT UNSIGNED     NOT NULL DEFAULT 0         收藏数
+--   is_featured   TINYINT UNSIGNED NOT NULL DEFAULT 0         是否精选
+--   is_top        TINYINT UNSIGNED NOT NULL DEFAULT 0         是否置顶
+--   published_at  DATETIME         DEFAULT NULL               发布时间
+--   created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；idx_author_id；idx_category_id；idx_status；idx_published_at；
+--       idx_is_featured；idx_is_top；idx_tree_id(tree_id)；idx_tree_node_id(tree_node_id)
+-- 注意事项：
+--   1) 浏览量实时值在 Redis 中累加，本表字段由定时任务回写（见 docs/07 2.7）
+--   2) tree_node_id 必须指向叶子节点，发布时由 treeService.assertIsLeaf(treeNodeId) 校验
+--   3) 列表排序：is_top 置顶优先 → sortBy 指定字段 → publishedAt 兜底
+
+-- -------------------------------------------------------
+-- A5. pb_article_content 文章正文表
+--     用途：Markdown 原文 + 渲染后 HTML，与元数据一对一
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   内容ID（主键）
+--   article_id   BIGINT UNSIGNED  NOT NULL                   文章ID（唯一，一对一）
+--   content      LONGTEXT         NOT NULL                   Markdown正文
+--   html_content LONGTEXT         DEFAULT NULL               渲染后HTML
+--   word_count   INT UNSIGNED     NOT NULL DEFAULT 0         字数
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_article_id(article_id)
+-- 注意事项：搜索时正文从本表读取，LIKE 命中后按 ±75 字符截取片段
+
+-- -------------------------------------------------------
+-- A6. pb_article_tag 文章标签关联表
+--     用途：文章与标签的多对多关联
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   article_id BIGINT UNSIGNED  NOT NULL                   文章ID
+--   tag_id     BIGINT UNSIGNED  NOT NULL                   标签ID
+--   created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_article_tag(article_id, tag_id)；idx_tag_id(tag_id)
+
+-- -------------------------------------------------------
+-- A7. pb_comment 评论表
+--     用途：文章评论与楼中楼回复
+--     status：0-待审核 1-通过 2-拒绝
+--     parent_id：父评论ID（NULL=顶级）；reply_to_id：回复目标评论ID
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   评论ID（主键）
+--   article_id   BIGINT UNSIGNED  NOT NULL                   文章ID
+--   user_id      BIGINT UNSIGNED  NOT NULL                   评论用户ID
+--   parent_id    BIGINT UNSIGNED  DEFAULT NULL               父评论ID（NULL=顶级评论）
+--   reply_to_id  BIGINT UNSIGNED  DEFAULT NULL               回复目标评论ID
+--   reply_to_uid BIGINT UNSIGNED  DEFAULT NULL               回复目标用户ID
+--   content      VARCHAR(1000)    NOT NULL                   评论内容
+--   like_count   INT UNSIGNED     NOT NULL DEFAULT 0         点赞数
+--   status       TINYINT UNSIGNED NOT NULL DEFAULT 0         状态：0-待审核 1-通过 2-拒绝
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；idx_article_id；idx_user_id；idx_parent_id；idx_status
+-- 注意事项：当前实现中 createComment 直接置为「通过」，评论不进入审核队列
+
+-- -------------------------------------------------------
+-- A8. pb_follow 关注关系表
+--     用途：用户之间的单向关注
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   follower_id  BIGINT UNSIGNED  NOT NULL                   粉丝ID
+--   following_id BIGINT UNSIGNED  NOT NULL                   关注用户ID
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_follow(follower_id, following_id)；idx_following_id(following_id)
+-- 注意事项：唯一键防止重复关注；不可自关注（应用层校验）
+
+-- -------------------------------------------------------
+-- A9. pb_collect 收藏表
+--     用途：用户收藏文章
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   user_id    BIGINT UNSIGNED  NOT NULL                   用户ID
+--   article_id BIGINT UNSIGNED  NOT NULL                   文章ID
+--   created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  收藏时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_collect(user_id, article_id)；idx_article_id(article_id)
+
+-- -------------------------------------------------------
+-- A10. pb_like 点赞表（文章 / 评论点赞共用）
+--     target_type：1-文章 2-评论
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   user_id     BIGINT UNSIGNED  NOT NULL                   用户ID
+--   target_id   BIGINT UNSIGNED  NOT NULL                   目标ID（文章ID或评论ID）
+--   target_type TINYINT UNSIGNED NOT NULL                   类型：1-文章 2-评论
+--   created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  点赞时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_like(user_id, target_id, target_type)；idx_target(target_id, target_type)
+-- 注意事项：唯一键含 target_type，故同一用户可同时点赞文章和评论而互不冲突
+
+-- -------------------------------------------------------
+-- A11. pb_notification 通知表
+--     type：1-评论 2-回复 3-关注 4-点赞 5-收藏 6-系统通知
+--     is_read：0-未读 1-已读
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   通知ID（主键）
+--   user_id      BIGINT UNSIGNED  NOT NULL                   接收用户ID
+--   type         TINYINT UNSIGNED NOT NULL                   类型：1-评论 2-回复 3-关注 4-点赞 5-收藏 6-系统通知
+--   title        VARCHAR(255)     DEFAULT NULL               通知标题
+--   content      VARCHAR(1000)    DEFAULT NULL               通知内容
+--   related_id   BIGINT UNSIGNED  DEFAULT NULL               关联ID（文章ID / 评论ID 等）
+--   related_type TINYINT UNSIGNED DEFAULT NULL               关联类型
+--   is_read      TINYINT UNSIGNED NOT NULL DEFAULT 0         是否已读：0-否 1-是
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+-- 索引：PRIMARY KEY(id)；idx_user_id；idx_is_read；idx_created_at
+
+-- -------------------------------------------------------
+-- A12. pb_login_log 登录日志表
+--     status：1-成功 2-失败
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   user_id    BIGINT UNSIGNED  DEFAULT NULL               用户ID（登录失败时可能为空）
+--   username   VARCHAR(50)      DEFAULT NULL               用户名
+--   ip         VARCHAR(50)      DEFAULT NULL               登录IP
+--   user_agent VARCHAR(500)     DEFAULT NULL               User-Agent
+--   status     TINYINT UNSIGNED NOT NULL DEFAULT 1         状态：1-成功 2-失败
+--   msg        VARCHAR(255)     DEFAULT NULL               备注信息
+--   created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  登录时间
+-- 索引：PRIMARY KEY(id)；idx_user_id；idx_created_at
+-- 注意事项：仅记录不删除，无需软删除字段
+
+-- -------------------------------------------------------
+-- A13. pb_kafka_outbox Kafka Outbox 表（当前未启用，预留）
+--     用途：业务事务内写「待发消息」，由独立投递器推送到 Kafka，保证消息可靠投递
+--     status：0-待发送 1-已发送 2-失败
+--     当前状态：表已建但无 Java 代码使用（见 docs/09 第 6 条、docs/07 2.7）
+--     未来引入 Kafka 时启用：业务事务内 INSERT 待发记录 → 投递器轮询 status=0 → 发送成功后置 status=1
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   topic       VARCHAR(100)     NOT NULL                   Kafka Topic
+--   msg_key     VARCHAR(255)     DEFAULT NULL               消息Key（分区键）
+--   payload     TEXT             NOT NULL                   消息内容（JSON）
+--   status      TINYINT UNSIGNED NOT NULL DEFAULT 0         状态：0-待发送 1-已发送 2-失败
+--   retry_count INT UNSIGNED     NOT NULL DEFAULT 0         重试次数
+--   created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   sent_at     DATETIME         DEFAULT NULL               发送时间
+-- 索引：PRIMARY KEY(id)；idx_status(status)；idx_created_at(created_at)
+-- 注意事项：项目当前用 Spring 进程内事件（ApplicationEventPublisher），本表仅为未来 Kafka 方案预留
+
+-- -------------------------------------------------------
+-- A14. pb_article_stats 文章统计表（定时聚合，待接入）
+--     用途：按天记录文章的 PV / UV，用于热榜与趋势图
+--     当前状态：表已建，暂无 Java 代码写入；实时 PV / UV 在 Redis 中累加
+--     待办：定时任务从 Redis 汇总落库（见 docs/07 2.7）
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   article_id BIGINT UNSIGNED  NOT NULL                   文章ID
+--   pv         INT UNSIGNED     NOT NULL DEFAULT 0         页面浏览量
+--   uv         INT UNSIGNED     NOT NULL DEFAULT 0         独立访客数
+--   date       DATE             NOT NULL                   统计日期
+--   created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_article_date(article_id, date)；idx_date(date)
+-- 注意事项：与 pb_article.view_count 的区别——本表是「按天」的历史快照，pb_article 上是「累计」值
+
+-- -------------------------------------------------------
+-- A15. pb_file 文件表（尚未在 Java 代码中启用，预留）
+--     用途：上传文件元数据，file_key 指向 MinIO / 对象存储中的对象
+--     file_type：1-图片 2-视频 3-文档 4-其他
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   uploader_id BIGINT UNSIGNED  NOT NULL                   上传者ID
+--   file_name   VARCHAR(255)     NOT NULL                   文件名
+--   file_key    VARCHAR(255)     NOT NULL                   MinIO存储Key
+--   file_url    VARCHAR(500)     NOT NULL                   访问URL
+--   file_size   BIGINT UNSIGNED  NOT NULL                   文件大小（字节）
+--   mime_type   VARCHAR(100)     DEFAULT NULL               MIME类型
+--   file_type   TINYINT UNSIGNED NOT NULL                   文件类型：1-图片 2-视频 3-文档 4-其他
+--   bucket      VARCHAR(50)      DEFAULT NULL               存储桶
+--   created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  上传时间
+-- 索引：PRIMARY KEY(id)；idx_uploader_id；idx_file_type(file_type)
+-- 注意事项：当前上传走本地目录，切换对象存储时启用本表
+
+-- -------------------------------------------------------
+-- A16. pb_system_config 系统配置表
+--     用途：键值对形式的站点配置（站点名、每页条数、评论审核开关等）
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   ID（主键）
+--   config_key  VARCHAR(100)     NOT NULL                   配置键（唯一）
+--   config_value TEXT            DEFAULT NULL               配置值
+--   description VARCHAR(255)     DEFAULT NULL               描述
+--   created_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_config_key(config_key)
+
 
 -- ============================================================
--- 17. pb_tree_node 目录树节点表
+-- B. 目录树模块
+--     用途：首页技能树导航。文章通过 pb_article.tree_node_id 挂载到叶子节点
+--     建表职责：scripts/schema.sql 已内含这两张表；
+--               backend/sql/init_tree.sql 是给「已上线库」的幂等 ALTER 版本（含 pb_article 挂载字段追加）
 -- ============================================================
-DROP TABLE IF EXISTS pb_tree_node;
-CREATE TABLE pb_tree_node (
-    id            BIGINT UNSIGNED  NOT NULL                              COMMENT '节点ID',
-    tree_id       BIGINT UNSIGNED  NOT NULL                              COMMENT '所属目录树',
-    parent_id     BIGINT UNSIGNED  DEFAULT NULL                          COMMENT '父节点 0/NULL=根',
-    name          VARCHAR(128)     NOT NULL                              COMMENT '节点名称',
-    color         VARCHAR(16)      DEFAULT NULL                          COMMENT '节点颜色',
-    sort_order    INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '排序',
-    depth         INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '0=根',
-    path          VARCHAR(512)     DEFAULT NULL                          COMMENT '物化路径 /id1/id2/id3/',
-    article_count INT UNSIGNED     NOT NULL DEFAULT 0                    COMMENT '已挂文章数',
-    created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP    COMMENT '创建时间',
-    updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0                    COMMENT '软删除',
-    PRIMARY KEY (id),
-    KEY idx_pb_tree_node_tree_parent (tree_id, parent_id),
-    KEY idx_pb_tree_node_tree_path   (tree_id, path)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目录树节点';
+
+-- -------------------------------------------------------
+-- B1. pb_tree 目录树主表
+--     用途：树的数量级与元信息（如 Java、前端两棵树）
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   主表ID（主键）
+--   code         VARCHAR(64)      NOT NULL                   唯一编码（如 java / frontend）
+--   name         VARCHAR(64)      NOT NULL                   名称
+--   description  VARCHAR(255)     DEFAULT NULL               描述
+--   cover_color  VARCHAR(16)      DEFAULT '#2563eb'          主色
+--   sort_order   INT UNSIGNED     NOT NULL DEFAULT 0         排序
+--   status       TINYINT UNSIGNED NOT NULL DEFAULT 1         状态：1-启用 0-禁用
+--   created_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at   DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted      TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_pb_tree_code(code)；idx_pb_tree_status(status)
+
+-- -------------------------------------------------------
+-- B2. pb_tree_node 目录树节点表
+--     用途：树的节点，支持多级嵌套
+--     parent_id：父节点ID（NULL=根节点）；depth：0=根；path：物化路径（如 /1/2/3/）
+-- -------------------------------------------------------
+-- 字段：
+--   id            BIGINT UNSIGNED  NOT NULL AUTO_INCREMENT   节点ID（主键）
+--   tree_id       BIGINT UNSIGNED  NOT NULL                   所属目录树（pb_tree.id）
+--   parent_id     BIGINT UNSIGNED  DEFAULT NULL               父节点ID（NULL=根）
+--   name          VARCHAR(128)     NOT NULL                   节点名称
+--   color         VARCHAR(16)      DEFAULT NULL               节点颜色
+--   sort_order    INT UNSIGNED     NOT NULL DEFAULT 0         排序
+--   depth         INT UNSIGNED     NOT NULL DEFAULT 0         层级深度：0=根
+--   path          VARCHAR(512)     DEFAULT NULL               物化路径（/id1/id2/id3/）
+--   article_count INT UNSIGNED     NOT NULL DEFAULT 0         已挂文章数（冗余计数）
+--   created_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  创建时间
+--   updated_at    DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP  更新时间
+--   deleted       TINYINT UNSIGNED NOT NULL DEFAULT 0         软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_tree_node_tree_parent(tree_id, parent_id)；idx_pb_tree_node_tree_path(tree_id, path)
+-- 注意事项：
+--   1) 节点ID 手工指定（seed 时显式给 id），便于维护稳定的路径
+--   2) 文章只能挂到叶子节点（depth 最大层），由 treeService.assertIsLeaf(treeNodeId) 校验
+--   3) 根节点 depth=0，叶子节点是 depth 最大的一层
+
+
+-- ============================================================
+-- C. 小工具模块（4 张）
+--     所属模块：pureblog-widget
+--     用途：小工具目录（记账 / 身家 / 回本之路 / 投资表）的入口展示与数据记录
+--     ID 策略：应用层雪花 ID（IdType.ASSIGN_ID）
+-- ============================================================
+
+-- -------------------------------------------------------
+-- C1. pb_widget 小工具主表
+--     用途：小工具入口元信息（图标、路径、排序、累计点击数）
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT      NOT NULL                 ID（主键，雪花ID）
+--   code        VARCHAR(64) NOT NULL                 工具编码（唯一）
+--   name        VARCHAR(64) NOT NULL                 工具名称
+--   description VARCHAR(255) DEFAULT NULL            工具描述
+--   icon        VARCHAR(32) DEFAULT NULL             Element Plus Icons 图标名（如 EditPen/Wallet）
+--                                                   取值见 frontend/pureblog-portal/src/constants/widgetIcons.ts
+--                                                   不用 emoji；查不到时前端按 code 兜底映射
+--   icon_color  VARCHAR(16) DEFAULT '#2563eb'        图标颜色
+--   path        VARCHAR(128) NOT NULL                前端路径
+--   sort_order  INT         NOT NULL DEFAULT 0      排序
+--   status      TINYINT     NOT NULL DEFAULT 1      状态：1-启用 0-禁用
+--   click_count INT         NOT NULL DEFAULT 0      总点击数（冗余，用于排序）
+--   created_at  DATETIME    DEFAULT NULL             创建时间
+--   updated_at  DATETIME    DEFAULT NULL             更新时间
+--   deleted     TINYINT     NOT NULL DEFAULT 0      软删除
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_pb_widget_code(code)；idx_pb_widget_status(status)
+-- 注意事项：click_count 为冗余计数，真实点击明细在 pb_widget_click
+
+-- -------------------------------------------------------
+-- C2. pb_widget_click 小工具点击流水
+--     用途：点击明细，用唯一键实现「同设备同一天对同一个小工具只计 1 次」
+--     唯一键：UNIQUE (widget_id, device_id, click_date)
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT      NOT NULL        ID（主键，雪花ID）
+--   widget_id  BIGINT      NOT NULL        小工具ID（pb_widget.id）
+--   device_id  VARCHAR(64) NOT NULL        设备标识
+--   click_date DATE        NOT NULL        点击日期
+--   created_at DATETIME    DEFAULT NULL    创建时间
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_pb_widget_click_dedup(widget_id, device_id, click_date)；idx_pb_widget_click_widget(widget_id)
+-- 注意事项：device_id 由前端生成并存于 localStorage；唯一键天然完成按天去重，无需额外判重逻辑
+
+-- -------------------------------------------------------
+-- C3. pb_ledger_dict 记账字典表（平台 + 项目合一，用 type 区分）
+--     用途：记账的平台与项目候选项
+--     type：1-平台 2-项目
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT      NOT NULL          ID（主键，雪花ID）
+--   type       TINYINT     NOT NULL          类型：1-平台 2-项目
+--   name       VARCHAR(64) NOT NULL          名称
+--   color      VARCHAR(16) DEFAULT '#6b7280' 颜色
+--   icon       VARCHAR(32) DEFAULT NULL      图标
+--   sort_order INT         NOT NULL DEFAULT 0  排序
+--   status     TINYINT     NOT NULL DEFAULT 1  状态：1-启用 0-禁用
+--   created_at DATETIME    DEFAULT NULL      创建时间
+--   updated_at DATETIME    DEFAULT NULL      更新时间
+--   deleted    TINYINT     NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_ledger_dict_type_status(type, status, sort_order)
+-- 注意事项：平台与项目共用一张表，用 type 区分，避免维护两张结构相同的表
+
+-- -------------------------------------------------------
+-- C4. pb_ledger_record 记账主表
+--     用途：每一条记账流水
+--     item_dict_id 与 item_text 互斥：前者=从字典选择，后者=手动输入文本
+-- -------------------------------------------------------
+-- 字段：
+--   id               BIGINT        NOT NULL        ID（主键，雪花ID）
+--   record_date      DATE          NOT NULL        记账日期
+--   platform_dict_id BIGINT        DEFAULT NULL    平台字典ID（pb_ledger_dict.id，type=1）
+--   item_dict_id     BIGINT        DEFAULT NULL    项目字典ID（pb_ledger_dict.id，type=2）
+--   item_text        VARCHAR(128)  DEFAULT NULL    手动输入的项目文本（与 item_dict_id 互斥）
+--   amount           DECIMAL(10,2) NOT NULL        金额
+--   device_id        VARCHAR(64)   NOT NULL        设备标识
+--   created_at       DATETIME      DEFAULT NULL    创建时间
+--   updated_at       DATETIME      DEFAULT NULL    更新时间
+--   deleted          TINYINT       NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_ledger_record_date(record_date)；idx_pb_ledger_record_device(device_id)
+-- 注意事项：多设备各自记账，靠 device_id 区分；按日期索引支撑月度/年度统计
+
+
+-- ============================================================
+-- D. 财务模块（9 张）
+--     所属模块：pureblog-widget（身家 / 回本之路 / 投资表三个业务）
+--     ID 策略：应用层雪花 ID（IdType.ASSIGN_ID）
+-- ============================================================
+
+-- -------------------------------------------------------
+-- D1. pb_account_category 身家-账户分类 / 维度表
+--     用途：账户的分类维度（如现金、存款、公积金、投资）
+--     is_counted_in_total：是否计入「目前完整身家」总额
+-- -------------------------------------------------------
+-- 字段：
+--   id                  BIGINT     NOT NULL          ID（主键，雪花ID）
+--   name                VARCHAR(32) NOT NULL          分类名称
+--   sort_order          INT        NOT NULL DEFAULT 0  排序
+--   is_counted_in_total TINYINT    NOT NULL DEFAULT 1  是否计入「目前完整身家」
+--   status              TINYINT    NOT NULL DEFAULT 1  状态：1-启用 0-禁用
+--   created_at          DATETIME   DEFAULT NULL       创建时间
+--   updated_at          DATETIME   DEFAULT NULL       更新时间
+--   deleted             TINYINT    NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_account_cat_status(status, sort_order)
+-- 注意事项：is_counted_in_total=0 的分类不参与总额计算（用于区分「可变现」与「不可变现」资产）
+
+-- -------------------------------------------------------
+-- D2. pb_account 身家-具体账户表
+--     用途：具体账户（如招商银行、支付宝、公积金账户）
+--     注意：本表无 category 字段，分类跟随 entry（见 pb_balance_entry.category_id）
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT      NOT NULL          ID（主键，雪花ID）
+--   name       VARCHAR(64) NOT NULL          账户名称
+--   icon       VARCHAR(32) DEFAULT NULL      图标
+--   color      VARCHAR(16) DEFAULT NULL      颜色
+--   sort_order INT         NOT NULL DEFAULT 0  排序
+--   status     TINYINT     NOT NULL DEFAULT 1  状态：1-启用 0-禁用
+--   created_at DATETIME    DEFAULT NULL      创建时间
+--   updated_at DATETIME    DEFAULT NULL      更新时间
+--   deleted    TINYINT     NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_account_status(status, sort_order)
+-- 注意事项：账户分类按「快照时刻」记录在快照明细上，故账户本身不带分类
+
+-- -------------------------------------------------------
+-- D3. pb_balance_snapshot 身家-快照头表
+--     用途：一次身家快照的头部（时间点 + 事件标签）
+--     快照是身家模块的核心概念：按时间排列快照，用相邻两个快照算增减（delta）
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT       NOT NULL        ID（主键，雪花ID）
+--   snapshot_at DATETIME     NOT NULL        快照日期（按时间排序 + 计算 delta）
+--   event_tag   VARCHAR(32)  DEFAULT NULL    事件标签：发薪 / 20号 / 月底 ...
+--   remark      VARCHAR(255) DEFAULT NULL    备注
+--   created_at  DATETIME     DEFAULT NULL    创建时间
+--   deleted     TINYINT      NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_balance_snapshot_at(snapshot_at)
+-- 注意事项：每个快照对应若干条 pb_balance_entry；删除快照需同步处理其明细
+
+-- -------------------------------------------------------
+-- D4. pb_balance_entry 身家-快照明细表
+--     用途：每行 = 某个账户在某个快照下的余额 + 当时的分类
+--     唯一键：UNIQUE (snapshot_id, account_id)
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT        NOT NULL           ID（主键，雪花ID）
+--   snapshot_id BIGINT        NOT NULL           快照ID（pb_balance_snapshot.id）
+--   account_id  BIGINT        NOT NULL           账户ID（pb_account.id）
+--   category_id BIGINT        NOT NULL           分类ID（pb_account_category.id，快照时刻的分类）
+--   balance     DECIMAL(14,2) NOT NULL DEFAULT 0 余额
+-- 索引：PRIMARY KEY(id)；UNIQUE uk_pb_balance_entry_snap_acct(snapshot_id, account_id)；
+--       idx_pb_balance_entry_snap_cat(snapshot_id, category_id)；idx_pb_balance_entry_acct(account_id)
+-- 注意事项：
+--   1) 分类存快照而非存账户 —— 允许同一账户在不同时间点归入不同分类
+--   2) 无时间字段，不做软删除（随快照级联处理）
+
+-- -------------------------------------------------------
+-- D5. pb_position 回本之路-仓位主表
+--     用途：持仓仓位的定义（如「沪深300」「某某个股」）
+--     cost：初始成本（回本计算的分母基准）
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT        NOT NULL          ID（主键，雪花ID）
+--   name       VARCHAR(64)   NOT NULL          仓位名称
+--   cost       DECIMAL(14,2) NOT NULL DEFAULT 0  初始成本
+--   remark     VARCHAR(255)  DEFAULT NULL      备注
+--   sort_order INT           NOT NULL DEFAULT 0  排序
+--   status     TINYINT       NOT NULL DEFAULT 1  状态：1-启用 0-禁用
+--   created_at DATETIME      DEFAULT NULL      创建时间
+--   updated_at DATETIME      DEFAULT NULL      更新时间
+--   deleted    TINYINT       NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_position_status(status, sort_order)
+-- 注意事项：市值随时间变化，存于 pb_position_value；本表只存静态定义与初始成本
+
+-- -------------------------------------------------------
+-- D6. pb_position_value 回本之路-仓位市值流水表
+--     用途：仓位的市值变化记录，用于计算「回本进度」
+-- -------------------------------------------------------
+-- 字段：
+--   id           BIGINT        NOT NULL        ID（主键，雪花ID）
+--   position_id  BIGINT        NOT NULL        仓位ID（pb_position.id）
+--   market_value DECIMAL(14,2) NOT NULL DEFAULT 0  市值
+--   recorded_at  DATETIME      NOT NULL        记录时间
+--   remark       VARCHAR(255)  DEFAULT NULL    备注
+--   created_at   DATETIME      DEFAULT NULL    创建时间
+--   deleted      TINYINT       NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_position_value_pos_at(position_id, recorded_at DESC)
+-- 注意事项：索引含 DESC，配合「取每个仓位最新一条市值」的高频查询
+
+-- -------------------------------------------------------
+-- D7. pb_fund 投资表-基金 / 股票主表
+--     用途：可投资标的的主数据
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT       NOT NULL          ID（主键，雪花ID）
+--   name       VARCHAR(64)  NOT NULL          名称
+--   code       VARCHAR(32)  DEFAULT NULL      基金代码 / 股票代码
+--   type       VARCHAR(16)  DEFAULT NULL      类型：基金 / 股票 / ETF / ...
+--   remark     VARCHAR(255) DEFAULT NULL      备注
+--   sort_order INT          NOT NULL DEFAULT 0  排序
+--   status     TINYINT      NOT NULL DEFAULT 1  状态：1-启用 0-禁用
+--   created_at DATETIME     DEFAULT NULL      创建时间
+--   updated_at DATETIME     DEFAULT NULL      更新时间
+--   deleted    TINYINT      NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_fund_status(status, sort_order)
+
+-- -------------------------------------------------------
+-- D8. pb_fund_buy 投资表-买入记录表
+--     用途：每笔买入交易
+--     金额关系：amount = price * shares
+-- -------------------------------------------------------
+-- 字段：
+--   id         BIGINT        NOT NULL          ID（主键，雪花ID）
+--   fund_id    BIGINT        NOT NULL          基金ID（pb_fund.id）
+--   buy_date   DATE          NOT NULL          买入日期
+--   price      DECIMAL(10,4) NOT NULL          买入单价
+--   shares     DECIMAL(14,2) NOT NULL          买入份额
+--   amount     DECIMAL(14,2) NOT NULL          买入金额（= price * shares）
+--   remark     VARCHAR(255)  DEFAULT NULL      备注
+--   created_at DATETIME      DEFAULT NULL      创建时间
+--   updated_at DATETIME      DEFAULT NULL      更新时间
+--   deleted    TINYINT       NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_fund_buy_fund(fund_id, buy_date)
+-- 注意事项：price 用 DECIMAL(10,4) 保留四位小数（净值精度），amount 用 DECIMAL(14,2) 表示金额
+
+-- -------------------------------------------------------
+-- D9. pb_fund_nav 投资表-净值 / 价格流水表
+--     用途：每个标的的净值或价格时间序列
+-- -------------------------------------------------------
+-- 字段：
+--   id          BIGINT        NOT NULL        ID（主键，雪花ID）
+--   fund_id     BIGINT        NOT NULL        基金ID（pb_fund.id）
+--   nav         DECIMAL(10,4) NOT NULL        当前净值 / 单价
+--   recorded_at DATETIME      NOT NULL        记录时间
+--   remark      VARCHAR(255)  DEFAULT NULL    备注
+--   created_at  DATETIME      DEFAULT NULL    创建时间
+--   deleted     TINYINT       NOT NULL DEFAULT 0  软删除
+-- 索引：PRIMARY KEY(id)；idx_pb_fund_nav_fund_at(fund_id, recorded_at DESC)
+-- 注意事项：与 pb_fund_buy 分开存——买入是交易，净值是行情；持仓盈亏由两者相乘计算
+
+
+-- ============================================================
+-- 默认数据
+--     以下默认数据由 scripts/schema.sql 末尾的 INSERT 语句写入，
+--     本文件只说明内容，不重复贴执行语句。
+-- ============================================================
+
+-- 1. 超管账号
+--    用户名 admin，密码 admin123（BCrypt 哈希），角色 4-超管，状态 1-正常
+--    用途：后台管理入口的初始账号
+
+-- 2. 默认分类（4 个）
+--    技术 / 生活 / 读书 / 随想，slug 分别为 tech / life / reading / thoughts
+
+-- 3. 默认标签（9 个）
+--    Java、Spring Boot、Redis、MySQL、Kafka、Docker、Vue、架构设计、性能优化
+
+-- 4. 默认系统配置（6 项）
+--    site_name             = PureBlog
+--    site_description      = 纯粹的技术博客平台
+--    article_per_page      = 10        每页文章数
+--    hot_article_days      = 7         热榜统计天数
+--    comment_need_audit    = true      评论是否需要审核
+--    upload_max_size       = 10485760  文件上传大小限制（字节）
+
+-- 5. 目录树初始数据
+--    由 backend/sql/init_tree.sql 写入：pb_tree 与 pb_tree_node 的种子节点
+--    节点ID 手工指定（便于维护稳定路径），depth 从 0（根）递增

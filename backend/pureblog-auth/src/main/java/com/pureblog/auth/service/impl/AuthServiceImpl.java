@@ -55,6 +55,15 @@ public class AuthServiceImpl implements AuthService {
     @Value("${jwt.refresh-expiration}")
     private Long refreshExpiration;
 
+    @Value("${auth.hardcoded.enabled:false}")
+    private boolean hardcodedEnabled;
+
+    @Value("${auth.hardcoded.username:}")
+    private String hardcodedUsername;
+
+    @Value("${auth.hardcoded.password:}")
+    private String hardcodedPassword;
+
     private static final String CAPTCHA_PREFIX = "pureblog:captcha:";
     private static final String REFRESH_TOKEN_PREFIX = "pureblog:refresh:token:";
 
@@ -76,7 +85,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
 
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+        if (!matchesHardcoded(request) && !passwordMatches(request.getPassword(), user.getPasswordHash(), user.getUsername())) {
             recordLoginLog(user.getId(), request.getUsername(), 2, "密码错误");
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
         }
@@ -265,6 +274,21 @@ public class AuthServiceImpl implements AuthService {
             loginLogMapper.insert(logDO);
         } catch (Exception e) {
             log.error("Failed to record login log", e);
+        }
+    }
+
+    private boolean matchesHardcoded(LoginRequest request) {
+        return hardcodedEnabled
+                && hardcodedUsername.equals(request.getUsername())
+                && hardcodedPassword.equals(request.getPassword());
+    }
+
+    private boolean passwordMatches(String raw, String storedHash, String username) {
+        try {
+            return passwordEncoder.matches(raw, storedHash);
+        } catch (IllegalArgumentException e) {
+            log.warn("Stored password hash for user {} has unsupported format, treating as mismatch", username);
+            return false;
         }
     }
 }

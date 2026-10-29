@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # MySQL 8.0 - 数据库
   mysql:
@@ -14,7 +12,11 @@ services:
       - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./backend/sql/init_tree.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      # 数字前缀强制 initdb.d 执行顺序: tree -> widget -> finance
+      # (init_finance.sql 依赖 pb_widget 已存在)
+      - ./backend/sql/init_tree.sql:/docker-entrypoint-initdb.d/01_init_tree.sql:ro
+      - ./backend/sql/init_widget.sql:/docker-entrypoint-initdb.d/02_init_widget.sql:ro
+      - ./backend/sql/init_finance.sql:/docker-entrypoint-initdb.d/03_init_finance.sql:ro
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password
     networks:
       - pureblog-net
@@ -36,24 +38,7 @@ services:
     networks:
       - pureblog-net
 
-  # Elasticsearch 8.12 - 搜索引擎
-  elasticsearch:
-    image: elasticsearch:8.12.0
-    container_name: pureblog-elasticsearch
-    restart: unless-stopped
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - ./deploy/data/elasticsearch:/usr/share/elasticsearch/data
-    networks:
-      - pureblog-net
-
-  # JDK17 + Maven - 编译运行环境
+  # JDK17 + Maven - 编译运行环境 (后端跑在本容器内, 通过 pureblog-net 连 mysql/redis)
   jdk17:
     image: maven:3.9-eclipse-temurin-17
     container_name: pureblog-jdk17
@@ -66,6 +51,12 @@ services:
       - ./logs:/workspace/logs
     environment:
       - JAVA_TOOL_OPTIONS=-Xms512m -Xmx768m
+      # 容器内走 service 名, 不走 127.0.0.1
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/pureblog?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=123456
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
     ports:
       - "8080:8080"      # 后端 API
       - "5005:5005"      # 远程调试

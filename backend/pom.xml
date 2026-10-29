@@ -18,12 +18,12 @@
         <module>pureblog-user</module>
         <module>pureblog-article</module>
         <module>pureblog-comment</module>
-        <module>pureblog-search</module>
         <module>pureblog-notification</module>
         <module>pureblog-stats</module>
         <module>pureblog-tree</module>
         <module>pureblog-upload</module>
         <module>pureblog-admin</module>
+        <module>pureblog-widget</module>
         <module>pureblog-app</module>
     </modules>
 
@@ -111,11 +111,6 @@
             </dependency>
             <dependency>
                 <groupId>com.pureblog</groupId>
-                <artifactId>pureblog-search</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.pureblog</groupId>
                 <artifactId>pureblog-notification</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -137,6 +132,11 @@
             <dependency>
                 <groupId>com.pureblog</groupId>
                 <artifactId>pureblog-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.pureblog</groupId>
+                <artifactId>pureblog-widget</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

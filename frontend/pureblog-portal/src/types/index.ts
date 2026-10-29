@@ -233,3 +233,5 @@ export interface TreeVO {
   root?: TreeNodeVO
   nodes?: TreeNodeVO[]
 }
+
+export * from './widget'

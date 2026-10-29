@@ -44,7 +44,7 @@
         </encoder>
     </appender>
 
-    <logger name="com.pureblog" level="DEBUG"/>
+    <logger name="com.pureblog" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

@@ -1,3 +1,8 @@
+---
+description: "后端实现规则：JWT 鉴权、缓存读写、异步事件、搜索方案、数据库分表与模块依赖"
+alwaysApply: true
+---
+
 # 后端实现规则
 
 ## 安全
@@ -22,9 +27,12 @@
 - 后续如需跨进程消息，需新增文档章节并同步 `docs/01`、`docs/02`
 
 ## 搜索
-- 仅已发布的文章应被索引（`status=PUBLISHED`）
-- 离线/已删除的文章必须从搜索结果中移除（监听 `ArticleEvent` 的 `OFFLINE` / `DELETED`）
-- 提供重建索引的能力（`/api/search/index/rebuild`）
+- 搜索实现在 `pureblog-article` 模块（`SearchServiceImpl` + `SearchMapper.xml`），走 MySQL `LIKE` 匹配
+- 仅返回已发布文章（`status=PUBLISHED`）
+- 关键词匹配范围：标题 OR 摘要 OR 正文 OR 标签名
+- **无索引、无索引重建接口**（LIKE 方案不需要）
+- 高亮由服务端在 HTML 转义之后插入 `<em>` 标签；因前端用 `v-html` 渲染，**服务端必须先转义原文再插标签**
+- 文章数超过 10000 时再考虑升级为 MySQL `FULLTEXT`（`ngram` 分词器）或重新引入搜索引擎
 
 ## 数据库
 - 文章元数据与内容必须分表存储（`pb_article` + `pb_article_content`）

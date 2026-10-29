@@ -37,10 +37,6 @@
         </dependency>
         <dependency>
             <groupId>com.pureblog</groupId>
-            <artifactId>pureblog-search</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.pureblog</groupId>
             <artifactId>pureblog-notification</artifactId>
         </dependency>
         <dependency>
@@ -58,6 +54,10 @@
         <dependency>
             <groupId>com.pureblog</groupId>
             <artifactId>pureblog-admin</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.pureblog</groupId>
+            <artifactId>pureblog-widget</artifactId>
         </dependency>
 
         <!-- Spring Boot -->

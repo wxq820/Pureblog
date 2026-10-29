@@ -7,10 +7,7 @@ import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
-@SpringBootApplication(scanBasePackages = "com.pureblog", exclude = {
-        org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration.class,
-        org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration.class
-})
+@SpringBootApplication(scanBasePackages = "com.pureblog")
 @MapperScan("com.pureblog.**.mapper")
 @EnableTransactionManagement
 @EnableAsync

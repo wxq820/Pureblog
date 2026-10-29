@@ -20,11 +20,12 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const form = ref({ username: '', password: '' })
 
@@ -36,7 +37,9 @@ async function submit() {
       return
     }
     userStore.setAuth({ token: res.data.accessToken, user: res.data.user })
-    router.push('/')
+    // 登录前被守卫拦下时, 跳回原来要去的页面
+    const redirect = route.query.redirect
+    router.push(typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/')
   } catch (e: any) {
     alert(e?.message || e?.data?.message || '登录失败')
   }

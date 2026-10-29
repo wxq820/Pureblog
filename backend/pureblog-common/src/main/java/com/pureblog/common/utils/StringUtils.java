@@ -43,4 +43,26 @@ public class StringUtils {
                 .replaceAll("-+", "-")
                 .replaceAll("^-|-$", "");
     }
+
+    /**
+     * 把 LIKE 通配符按字面量处理, 供 {@code LIKE CONCAT('%', ?, '%') ESCAPE '!'} 使用.
+     *
+     * <p>转义符为 {@code !}, 与 SearchMapper.xml 中的 ESCAPE '!' 保持一致:
+     * {@code !} → {@code !!}, {@code %} → {@code !%}, {@code _} → {@code !_}。
+     * 不转义的话, 用户搜 "100%" 会匹配到任意内容。
+     */
+    public static String escapeLike(String str) {
+        if (str == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(str.length() + 8);
+        for (int i = 0; i < str.length(); i++) {
+            char c = str.charAt(i);
+            if (c == '!' || c == '%' || c == '_') {
+                sb.append('!');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
 }
