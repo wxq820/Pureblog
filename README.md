@@ -105,7 +105,7 @@ cd backend
 mvn -pl pureblog-app -am spring-boot:run
 ```
 
-默认管理员：`admin / admin123`（脚本 seed 数据）。
+默认管理员：`admin / 123456`（脚本 seed 数据）。
 
 > 新增用户直接在 `pb_user` 表 INSERT，密码用 BCrypt 哈希（前端**默认不暴露**注册入口）。
 
@@ -146,5 +146,5 @@ npm install && npm run dev    # 门户 http://localhost:3000
 
 ## 7. 测试账号
 
-- 超管：`admin / admin123`（脚本 seed）
+- 超管：`admin / 123456`（脚本 seed）
 - 普通用户：直接在 `pb_user` 表 INSERT（前端默认不引导注册）

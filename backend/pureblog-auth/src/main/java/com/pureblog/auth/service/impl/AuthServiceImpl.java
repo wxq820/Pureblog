@@ -287,7 +287,9 @@ public class AuthServiceImpl implements AuthService {
         try {
             return passwordEncoder.matches(raw, storedHash);
         } catch (IllegalArgumentException e) {
-            log.warn("Stored password hash for user {} has unsupported format, treating as mismatch", username);
+            // DelegatingPasswordEncoder 依赖 "{bcrypt}" 前缀识别编码器, 缺失或格式非法时抛此异常
+            log.warn("Stored password hash for user {} has unsupported format (missing {{bcrypt}} prefix?), treating as mismatch. "
+                    + "Reason: {}", username, e.getMessage());
             return false;
         }
     }

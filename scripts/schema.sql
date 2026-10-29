@@ -542,9 +542,10 @@ CREATE TABLE IF NOT EXISTS pb_fund_nav (
 -- 初始数据
 -- -------------------------------------------------------
 
--- 插入超管账户 (密码: admin123, BCrypt加密)
+-- 插入超管账户 (密码: 123456, BCrypt加密)
+-- 注意: 必须带 {bcrypt} 前缀, 否则 DelegatingPasswordEncoder 无法识别编码器并抛 IllegalArgumentException
 INSERT INTO pb_user (username, email, password_hash, nickname, role, status) VALUES
-('admin', 'admin@pureblog.com', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '管理员', 4, 1);
+('admin', 'admin@pureblog.com', '{bcrypt}$2a$10$1r/NR34FDwbvznVeQ67rx.ezhVP6FOIaN5wkyNwx..TnnL46hE7wm', '管理员', 4, 1);
 
 -- 插入默认分类
 INSERT INTO pb_category (name, slug, description, sort_order) VALUES

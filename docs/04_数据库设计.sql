@@ -620,8 +620,10 @@
 -- ============================================================
 
 -- 1. 超管账号
---    用户名 admin，密码 admin123（BCrypt 哈希），角色 4-超管，状态 1-正常
+--    用户名 admin，密码 123456（BCrypt 哈希，带 {bcrypt} 前缀），角色 4-超管，状态 1-正常
 --    用途：后台管理入口的初始账号
+--    注意：{bcrypt} 前缀不可省略——DelegatingPasswordEncoder 依赖该前缀识别编码器，
+--          缺失时会抛 IllegalArgumentException，导致密码校验恒为失败
 
 -- 2. 默认分类（4 个）
 --    技术 / 生活 / 读书 / 随想，slug 分别为 tech / life / reading / thoughts

@@ -50,7 +50,7 @@ jwt:
   refresh-expiration: 604800000
 
 # 单用户开发环境专用: 配置后, 登录时跳过 DB 密码校验
-# (auth 库里 admin 的 password_hash 缺 {bcrypt} 前缀, 懒得修就硬编码过来)
+# (与 scripts/schema.sql 种子数据的 admin/123456 保持一致, 避免因本地 DB 密码被改动而无法登录)
 auth:
   hardcoded:
     enabled: true
